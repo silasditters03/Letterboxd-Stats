@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Letterboxd Stats</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="text/javascript" src="/eel.js"></script>
+</head>
+<body>
+
+    <div id="upload-screen" class="panel active">
+        <h1>🎬 Letterboxd Stats App</h1>
+        <p class="subtitle">Select your data export zip to begin.</p>
+        
+        <button id="browse-btn" class="btn orange">Browse for .zip</button>
+        <p id="file-label">No file selected</p>
+        
+        <div id="progress-container" class="hidden">
+            <div id="progress-bar"></div>
+        </div>
+        
+        <p id="status-label"></p>
+        <button id="generate-btn" class="btn green disabled" disabled>Generate Stats</button>
+    </div>
+
+    <div id="dashboard-screen" class="hidden">
+        
+        <div class="tabs-container">
+            <button class="tab-btn active" data-target="overview-tab">Overview</button>
+            <button class="tab-btn" data-target="cast-tab">Cast & Crew</button>
+        </div>
+
+        <div id="overview-tab" class="tab-content active">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <span class="stat-title">Total Films</span>
+                    <span id="stat-total" class="stat-value text-green">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-title">Hours Watched</span>
+                    <span id="stat-hours" class="stat-value text-white">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-title">Countries</span>
+                    <span id="stat-countries" class="stat-value text-orange">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-title">Directors</span>
+                    <span id="stat-directors" class="stat-value text-blue">0</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2 class="section-title">🏆 Top 20 Films</h2>
+                <div id="poster-grid" class="grid-container">
+                    </div>
+            </div>
+        </div>
+
+        <div id="cast-tab" class="tab-content hidden">
+            <div class="stats-row">
+                <div class="panel flex-half">
+                    <h2 class="section-title text-orange">🌟 Most Watched Actors</h2>
+                    <div id="actors-list" class="leaderboard-list"></div>
+                </div>
+                
+                <div class="panel flex-half">
+                    <h2 class="section-title text-blue">🎬 Most Watched Directors</h2>
+                    <div id="directors-list" class="leaderboard-list"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

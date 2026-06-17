@@ -1,89 +1,47 @@
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
-import zipfile
+import eel
+import tkinter as tk
+from tkinter import filedialog
+import data_processing
 
-# Letterboxd Color Palette
-BG_COLOR = "#14181c"
-PANEL_COLOR = "#2c3440"
-GREEN_ACCENT = "#00e054"
-ORANGE_ACCENT = "#ff8000"
+# Tell Eel to look for the HTML/CSS in the "web" folder
+eel.init('web')
 
-ctk.set_appearance_mode("dark")
-
-def select_file():
+@eel.expose
+def get_file_path():
+    """Opens a native OS file dialog so the user can select their zip."""
+    # We use a tiny, hidden Tkinter window just to trigger the file dialog safely
+    root = tk.Tk()
+    root.attributes('-topmost', True) # Keep dialog in front
+    root.withdraw() # Hide the main window
+    
     file_path = filedialog.askopenfilename(
-        title="Select Letterboxd Zip File",
+        title="Select Letterboxd Zip File", 
         filetypes=[("Zip files", "*.zip")]
     )
     
-    if file_path:
-        file_label.configure(text=f"Selected: {file_path.split('/')[-1]}")
+    root.destroy()
+    return file_path
+
+@eel.expose
+def process_data(file_path):
+    """Passes the file path to the engine and returns the stats to Javascript."""
+    
+    # A callback function that triggers our Javascript progress bar
+    def python_progress_callback(current, total):
+        # Call the JS function named "updateProgress"
+        eel.updateProgress(current, total)()
+
+    try:
+        # Run the heavy data engine!
+        stats = data_processing.get_homepage_stats(
+            file_path, 
+            max_movies_to_fetch=20, 
+            progress_callback=python_progress_callback
+        )
+        return {"status": "success", "data": stats}
         
-        if zipfile.is_zipfile(file_path):
-            try:
-                with zipfile.ZipFile(file_path, 'r') as zip_ref:
-                    file_list = zip_ref.namelist()
-                    if "ratings.csv" in file_list or "watched.csv" in file_list:
-                         status_label.configure(text="Data loaded! Ready to analyze...", text_color=GREEN_ACCENT)
-                         process_button.configure(state="normal")
-                    else:
-                         status_label.configure(text="Valid zip, but missing CSVs.", text_color=ORANGE_ACCENT)
-            except Exception as e:
-                status_label.configure(text=f"Error reading zip.", text_color="red")
-        else:
-            status_label.configure(text="Not a valid zip file.", text_color="red")
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-# Set up the main window
-app = ctk.CTk(fg_color=BG_COLOR)
-app.title("Letterboxd Stats")
-
-# Set initial size, but allow resizing/fullscreening
-app.geometry("600x400")
-app.resizable(True, True) # <-- Changed to True
-
-# Optional: Uncomment the line below if you want the app to open maximized by default
-# app.state("zoomed") 
-
-# Main layout frame
-frame = ctk.CTkFrame(master=app, fg_color=PANEL_COLOR, corner_radius=15)
-frame.pack(pady=40, padx=40, fill="both", expand=True)
-
-# UI Elements
-title_label = ctk.CTkLabel(master=frame, text="Letterboxd Stats App", font=("Helvetica", 28, "bold"), text_color="#ffffff")
-title_label.pack(pady=(30, 10))
-
-instruction_label = ctk.CTkLabel(master=frame, text="Upload your data export to begin", font=("Helvetica", 16), text_color="#9ab")
-instruction_label.pack(pady=(0, 30))
-
-upload_button = ctk.CTkButton(
-    master=frame, 
-    text="Browse for .zip", 
-    command=select_file, 
-    fg_color=ORANGE_ACCENT, 
-    hover_color="#cc6600",
-    font=("Helvetica", 16, "bold"),
-    corner_radius=8,
-    height=40
-)
-upload_button.pack(pady=10)
-
-file_label = ctk.CTkLabel(master=frame, text="No file selected", font=("Helvetica", 14), text_color="#9ab")
-file_label.pack(pady=10)
-
-status_label = ctk.CTkLabel(master=frame, text="", font=("Helvetica", 14, "bold"))
-status_label.pack(pady=10)
-
-process_button = ctk.CTkButton(
-    master=frame, 
-    text="Generate Stats", 
-    state="disabled",
-    fg_color=GREEN_ACCENT, 
-    hover_color="#00b344",
-    text_color="#14181c",
-    font=("Helvetica", 16, "bold"),
-    corner_radius=8,
-    height=40
-)
-process_button.pack(pady=(10, 30))
-
-app.mainloop()
+# Launch the app in a standalone desktop window!
+eel.start('index.html', size=(1100, 850))

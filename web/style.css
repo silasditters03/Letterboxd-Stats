@@ -1,0 +1,227 @@
+/* --- Variables & Base Setup --- */
+:root {
+    --bg-color: #14181c;
+    --panel-color: #2c3440;
+    --green: #00e054;
+    --orange: #ff8000;
+    --blue: #00b0ff;
+    --text-muted: #9ab;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: white;
+    padding: 30px;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.hidden { display: none !important; }
+.active { display: block; }
+
+/* --- Upload Screen --- */
+.panel {
+    background-color: var(--panel-color);
+    border-radius: 15px;
+    padding: 40px;
+    margin: 0 auto;
+    max-width: 1000px;
+    text-align: center;
+}
+
+h1 { font-size: 32px; margin-bottom: 10px; }
+.subtitle { color: var(--text-muted); margin-bottom: 30px; font-size: 16px; }
+#file-label { color: var(--text-muted); margin: 15px 0; }
+#status-label { font-weight: bold; margin: 15px 0; height: 20px; }
+
+/* Buttons */
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn.orange { background-color: var(--orange); color: white; }
+.btn.orange:hover { background-color: #cc6600; }
+.btn.green { background-color: var(--green); color: var(--bg-color); }
+.btn.green:hover { background-color: #00b344; }
+.btn.disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Progress Bar */
+#progress-container {
+    width: 300px;
+    height: 8px;
+    background-color: var(--bg-color);
+    border-radius: 4px;
+    margin: 0 auto 20px auto;
+    overflow: hidden;
+}
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background-color: var(--green);
+    transition: width 0.2s ease;
+}
+
+/* --- Dashboard Top Stats --- */
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 0 auto 30px auto;
+    max-width: 1000px;
+}
+.stat-card {
+    background-color: var(--panel-color);
+    border-radius: 10px;
+    padding: 20px;
+    flex: 1;
+    text-align: center;
+}
+.stat-title { display: block; color: var(--text-muted); font-size: 14px; margin-bottom: 10px; }
+.stat-value { font-size: 28px; font-weight: bold; }
+.text-green { color: var(--green); }
+.text-white { color: white; }
+.text-orange { color: var(--orange); }
+.text-blue { color: var(--blue); }
+
+.section-title { text-align: left; margin-bottom: 20px; font-size: 20px;}
+
+/* --- The Perfect Poster Grid --- */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr); /* Exactly 8 equal columns */
+    gap: 15px; /* Spacing between posters */
+}
+
+/* Card Container */
+.poster-card {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    aspect-ratio: 2 / 3; 
+    background-color: var(--bg-color);
+    
+    /* NEW: We added transform and box-shadow to the transition so they animate smoothly */
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Make top 4 cards span 2 columns each */
+.poster-card.large { grid-column: span 2; }
+/* Bottom 16 default to spanning 1 column */
+.poster-card.small { grid-column: span 1; }
+
+.poster-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Hover Overlay Text (Keep this exactly the same) */
+.poster-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.9)); 
+    padding: 30px 10px 10px 10px;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: left;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none; 
+}
+.poster-card.small .poster-overlay { font-size: 10px; padding: 20px 8px 8px 8px; }
+
+/* --- THE NEW HOVER ANIMATION --- */
+.poster-card:hover {
+    border-color: white;
+    
+    /* 1. Scale the card up by 8% */
+    transform: scale(1.08); 
+    
+    /* 2. Force it to render on top of the surrounding posters */
+    z-index: 10; 
+    
+    /* 3. Add a soft dark shadow beneath it to give it 3D depth */
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.8); 
+}
+
+.poster-card:hover .poster-overlay {
+    opacity: 1;
+}
+
+/* --- Tabs Navigation --- */
+.tabs-container {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+.tab-btn {
+    background-color: transparent;
+    color: var(--text-muted);
+    border: 2px solid var(--panel-color);
+    padding: 10px 25px;
+    border-radius: 20px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.tab-btn:hover {
+    border-color: var(--text-muted);
+    color: white;
+}
+.tab-btn.active {
+    background-color: var(--panel-color);
+    border-color: var(--panel-color);
+    color: white;
+}
+
+/* Tab Content Visibility */
+.tab-content { display: none; }
+.tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Cast & Crew Leaderboards --- */
+.flex-half {
+    flex: 1;
+    text-align: left;
+}
+.leaderboard-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 16px;
+}
+.leaderboard-item:last-child { border-bottom: none; }
+.leaderboard-name { font-weight: bold; }
+.leaderboard-count {
+    background-color: var(--bg-color);
+    padding: 4px 10px;
+    border-radius: 12px;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: bold;
+}
