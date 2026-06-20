@@ -428,3 +428,33 @@ h1 { font-size: 32px; margin-bottom: 10px; }
 .bio-container::-webkit-scrollbar { width: 6px; }
 .bio-container::-webkit-scrollbar-track { background: transparent; }
 .bio-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+/* --- World Map Overrides --- */
+/* Force Letterboxd blue on hover for all map regions */
+#regions_div path:hover {
+    fill: #40bcf4 !important;
+    opacity: 1 !important;
+    cursor: pointer;
+}
+
+/* Remove default Google tooltip styling to use our custom HTML */
+.google-visualization-tooltip {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* --- World Map Overrides --- */
+
+/* Remove default Google tooltip styling to use our custom HTML */
+.google-visualization-tooltip {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.google-visualization-tooltip {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}

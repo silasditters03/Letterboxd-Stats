@@ -147,7 +147,6 @@ def fetch_movie_details(title, year):
                 directors = [m['name'] for m in crew if m['job'] in ['Director', 'Co-Director', 'Segment Director']]
                 if not directors and data.get('created_by'): directors = [c['name'] for c in data.get('created_by', [])]
             
-            # --- NEW: Grab the poster for the tooltip! ---
             poster_path = data.get('poster_path') or main_poster_path
             poster_url = f"https://image.tmdb.org/t/p/w92{poster_path}" if poster_path else None
             
@@ -175,7 +174,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         total_watched = len(watched_df)
         top_20_df = None
         
-        # ... (Top 20 fetching logic remains identical) ...
         list_files = [f for f in file_list if f.startswith('lists/') and f.endswith('.csv')]
         for file_path in list_files:
             with z.open(file_path) as f:
@@ -269,15 +267,20 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         total_minutes = 0
         unique_countries = set()
         
-        # --- NEW: Bundle the actual movies with the cast & crew ---
         director_films = {}
         actor_films = {}
+        year_films = {} 
+        country_counts = {} # <--- NEW: Dictionary to track films per country
         
         for idx, row in enumerate(movies_to_process.itertuples(index=False)):
             details = fetch_movie_details(row.Name, row.safe_year)
             if details:
                 total_minutes += details['runtime'] * row.play_count
                 unique_countries.update(details['countries'])
+                
+                # --- NEW: Tally up the countries ---
+                for country in details['countries']:
+                    country_counts[country] = country_counts.get(country, 0) + row.play_count
                 
                 movie_obj = {
                     "title": row.Name,
@@ -288,6 +291,8 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 
                 for d in details['directors']: director_films.setdefault(d, []).append(movie_obj)
                 for a in details['actors']: actor_films.setdefault(a, []).append(movie_obj)
+                
+                year_films.setdefault(row.safe_year, []).append(movie_obj)
                 
             if not movies_missing_from_cache and progress_callback: progress_callback(idx + 1, total_to_process)
             
@@ -321,39 +326,54 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 top_rated_actors.append({"name": name, "avg_rating": sum(f['rating'] for f in rated) / len(rated), "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)})
         top_rated_actors = sorted(top_rated_actors, key=lambda x: (x['avg_rating'], x['count']), reverse=True)[:10]
 
-        # Fetch deep details and pack the UI payload
+        # Fetch biographies and pack UI payload
         for group in [top_directors, top_actors, top_rated_directors, top_rated_actors]:
             for p in group:
                 details = fetch_person_details(p['name'])
                 p['image_url'] = details['image_url']
                 p['biography'] = details['biography']
                 
-                # Keep ALL films for the profile page, let Javascript handle the tooltip slicing!
+                p['remaining'] = max(0, len(p['films']) - 10)
+                p['top_films'] = p['films'][:10] 
+                del p['films'] 
                 if 'avg_rating' in p: p['avg_rating'] = round(p['avg_rating'], 2)
-        
-# --- NEW: Yearly Histograms ---
+
+        # --- CONTINUOUS YEARLY HISTOGRAMS ---
         valid_years_df = movies_to_process[movies_to_process['safe_year'] > 0].copy()
-
-        # 1. Count total films per year (respecting rewatches)
-        year_counts = valid_years_df.groupby('safe_year')['play_count'].sum().reset_index()
-        year_counts.columns = ['year', 'count']
-
-        # 2. Average rating per year (only counting films you actually rated)
-        rated_films_df = valid_years_df[valid_years_df['Rating'] > 0]
-        year_ratings = rated_films_df.groupby('safe_year')['Rating'].mean().reset_index()
-        year_ratings.columns = ['year', 'avg_rating']
-
-        # Merge them together and sort chronologically
-        yearly_stats_df = pd.merge(year_counts, year_ratings, on='year', how='left')
-        yearly_stats_df['avg_rating'] = yearly_stats_df['avg_rating'].fillna(0).round(2)
-        yearly_stats_df = yearly_stats_df.sort_values('year')
         
-        yearly_stats_list = yearly_stats_df.to_dict('records')
-        
+        if not valid_years_df.empty:
+            min_year = int(valid_years_df['safe_year'].min())
+            max_year = int(valid_years_df['safe_year'].max())
+            
+            all_years_df = pd.DataFrame({'year': range(min_year, max_year + 1)})
+
+            year_counts = valid_years_df.groupby('safe_year')['play_count'].sum().reset_index()
+            year_counts.columns = ['year', 'count']
+
+            rated_films_df = valid_years_df[valid_years_df['Rating'] > 0]
+            year_ratings = rated_films_df.groupby('safe_year')['Rating'].mean().reset_index()
+            year_ratings.columns = ['year', 'avg_rating']
+
+            yearly_stats_df = pd.merge(all_years_df, year_counts, on='year', how='left')
+            yearly_stats_df = pd.merge(yearly_stats_df, year_ratings, on='year', how='left')
+            
+            yearly_stats_df['count'] = yearly_stats_df['count'].fillna(0).astype(int)
+            yearly_stats_df['avg_rating'] = yearly_stats_df['avg_rating'].fillna(0).round(2)
+            
+            yearly_stats_list = yearly_stats_df.to_dict('records')
+            
+            # Attach the movies to each year and sort them by rating
+            for y_stat in yearly_stats_list:
+                y_stat['films'] = sorted(year_films.get(y_stat['year'], []), key=lambda x: (x['rating'], x['play_count']), reverse=True)
+        else:
+            yearly_stats_list = []
+            
     return {
         "total_watched": total_watched, "top_20": top_20_list, "total_hours": round(total_minutes / 60, 1),
         "total_countries": len(unique_countries), "total_directors": len(director_films), 
         "top_directors_list": top_directors, "top_actors_list": top_actors,
         "top_rated_directors_list": top_rated_directors, "top_rated_actors_list": top_rated_actors,
-        "yearly_stats": yearly_stats_list # <--- MAKE SURE TO ADD THIS TO YOUR RETURN!
+        "yearly_stats": yearly_stats_list,
+        # --- NEW: Format the dictionary into a clean list for Google Charts ---
+        "country_stats": [{"Country": k, "Count": v} for k, v in country_counts.items()] 
     }

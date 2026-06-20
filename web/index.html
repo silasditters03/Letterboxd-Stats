@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script type="text/javascript" src="/eel.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 </head>
 <body>
 
@@ -32,6 +33,7 @@
         <div class="tabs-container">
             <button class="tab-btn active" data-target="overview-tab">Overview</button>
             <button class="tab-btn" data-target="cast-tab">Cast & Crew</button>
+            <button class="tab-btn" data-target="map-tab">Countries & Languages</button>
         </div>
 
         <div id="overview-tab" class="tab-content active">
@@ -56,49 +58,72 @@
 
             <div class="panel">
                 <h2 class="section-title">🏆 Top 20 Films</h2>
-                <div id="poster-grid" class="grid-container">
-                    </div>
+                <div id="poster-grid" class="grid-container"></div>
+                
                 <div class="charts-container" style="margin-top: 40px;">
-            <div class="leaderboard-column" style="margin-bottom: 25px;">
-                <h3 style="color: #00E054;">Films by Release Year</h3>
-                <canvas id="yearCountChart" height="70"></canvas>
-            </div>
+                    <div class="leaderboard-column" style="margin-bottom: 25px;">
+                        <h3 style="color: #00E054;">Films by Release Year</h3>
+                        <div style="position: relative; height: 250px; width: 100%;">
+                            <canvas id="yearCountChart"></canvas>
+                        </div>
+                    </div>
             
-            <div class="leaderboard-column">
-                <h3 style="color: var(--orange);">Average Rating by Release Year</h3>
-                <canvas id="yearRatingChart" height="70"></canvas>
-            </div>
-        </div>
+                    <div class="leaderboard-column">
+                        <h3 style="color: var(--orange);">Average Rating by Release Year</h3>
+                        <div style="position: relative; height: 250px; width: 100%;">
+                            <canvas id="yearRatingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div id="cast-tab" class="tab-content hidden">
-            
             <div class="leaderboard-grid"> 
-                
                 <div class="leaderboard-column">
                     <h3>Most Watched Actors</h3>
                     <div id="actors-list" class="leaderboard-container"></div>
                 </div>
-
                 <div class="leaderboard-column">
                     <h3>Most Watched Directors</h3>
                     <div id="directors-list" class="leaderboard-container"></div>
                 </div>
-
                 <div class="leaderboard-column">
                     <h3>Highest Rated Actors (Min. 3)</h3>
                     <div id="rated-actors-list" class="leaderboard-container"></div>
                 </div>
-
                 <div class="leaderboard-column">
                     <h3>Highest Rated Directors (Min. 3)</h3>
                     <div id="rated-directors-list" class="leaderboard-container"></div>
                 </div>
-                
             </div> 
         </div>
 
+        <div id="map-tab" class="tab-content hidden">
+            <div class="panel">
+                <h2 class="section-title">🌍 World Cinema Map</h2>
+                <p style="color: #89a; margin-bottom: 20px;">Interactive map of every country represented in your watched films.</p>
+                <div id="regions_div" style="width: 100%; height: 500px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="year-screen" class="hidden">
+        <button id="back-to-dashboard-from-year" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
+        
+        <div class="profile-header">
+            <div class="profile-info">
+                <h2 id="year-title" style="font-size: 3.5em; color: #00E054; margin: 0;">YYYY</h2>
+                <p id="year-stats" style="color: #89a; font-size: 1.2em; margin-top: 10px;">X films • ★ Y Avg</p>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            Films Released in <span id="year-subtitle">YYYY</span>
+        </h3>
+        
+        <div id="year-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
     <div id="profile-screen" class="hidden">
@@ -120,7 +145,7 @@
             Watched Films
         </h3>
         
-        <div id="profile-movies-grid" id="poster-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
+        <div id="profile-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
     <script src="script.js"></script>
