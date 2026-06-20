@@ -6,6 +6,7 @@
     <title>Letterboxd Stats</title>
     <link rel="stylesheet" href="style.css">
     <script type="text/javascript" src="/eel.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -13,7 +14,9 @@
         <h1>🎬 Letterboxd Stats App</h1>
         <p class="subtitle">Select your data export zip to begin.</p>
         
-        <button id="browse-btn" class="btn orange">Browse for .zip</button>
+        <label for="file-input" class="btn orange" style="display: inline-block; cursor: pointer;">Browse for .zip</label>
+        <input type="file" id="file-input" accept=".zip" class="hidden">
+        
         <p id="file-label">No file selected</p>
         
         <div id="progress-container" class="hidden">
@@ -55,23 +58,69 @@
                 <h2 class="section-title">🏆 Top 20 Films</h2>
                 <div id="poster-grid" class="grid-container">
                     </div>
+                <div class="charts-container" style="margin-top: 40px;">
+            <div class="leaderboard-column" style="margin-bottom: 25px;">
+                <h3 style="color: #00E054;">Films by Release Year</h3>
+                <canvas id="yearCountChart" height="70"></canvas>
+            </div>
+            
+            <div class="leaderboard-column">
+                <h3 style="color: var(--orange);">Average Rating by Release Year</h3>
+                <canvas id="yearRatingChart" height="70"></canvas>
+            </div>
+        </div>
             </div>
         </div>
 
         <div id="cast-tab" class="tab-content hidden">
-            <div class="stats-row">
-                <div class="panel flex-half">
-                    <h2 class="section-title text-orange">🌟 Most Watched Actors</h2>
-                    <div id="actors-list" class="leaderboard-list"></div>
+            
+            <div class="leaderboard-grid"> 
+                
+                <div class="leaderboard-column">
+                    <h3>Most Watched Actors</h3>
+                    <div id="actors-list" class="leaderboard-container"></div>
+                </div>
+
+                <div class="leaderboard-column">
+                    <h3>Most Watched Directors</h3>
+                    <div id="directors-list" class="leaderboard-container"></div>
+                </div>
+
+                <div class="leaderboard-column">
+                    <h3>Highest Rated Actors (Min. 3)</h3>
+                    <div id="rated-actors-list" class="leaderboard-container"></div>
+                </div>
+
+                <div class="leaderboard-column">
+                    <h3>Highest Rated Directors (Min. 3)</h3>
+                    <div id="rated-directors-list" class="leaderboard-container"></div>
                 </div>
                 
-                <div class="panel flex-half">
-                    <h2 class="section-title text-blue">🎬 Most Watched Directors</h2>
-                    <div id="directors-list" class="leaderboard-list"></div>
+            </div> 
+        </div>
+
+    </div>
+
+    <div id="profile-screen" class="hidden">
+        <button id="back-to-dashboard" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
+        
+        <div class="profile-header">
+            <div class="profile-image-container">
+                <img id="profile-image" src="" alt="">
+            </div>
+            <div class="profile-info">
+                <h2 id="profile-name">Name</h2>
+                <div class="bio-container">
+                    <p id="profile-bio">Biography goes here...</p>
                 </div>
             </div>
         </div>
 
+        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            Watched Films
+        </h3>
+        
+        <div id="profile-movies-grid" id="poster-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
     <script src="script.js"></script>

@@ -225,3 +225,206 @@ h1 { font-size: 32px; margin-bottom: 10px; }
     font-size: 14px;
     font-weight: bold;
 }
+
+/* --- Leaderboard Layout Upgrades --- */
+.leaderboard-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.leaderboard-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    background-color: var(--bg-color);
+}
+
+.leaderboard-avatar-fallback {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background-color: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard-item {
+    padding: 8px 15px !important; /* Slightly tighter vertical padding for better spacing */
+}
+
+/* --- 2x2 Leaderboard Grid Layout --- */
+.leaderboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Forces exactly two columns side-by-side */
+    gap: 30px; /* Adds clean breathing room between the lists */
+    width: 100%;
+    align-items: start; /* Keeps the lists pinned to the top even if one is longer */
+}
+
+/* Optional: Make it responsive so it stacks nicely if the window gets too small */
+@media (max-width: 900px) {
+    .leaderboard-grid {
+        grid-template-columns: 1fr; /* Reverts to 1 column on small screens */
+    }
+}
+
+/* --- Professional Card Styling for Leaderboards --- */
+.leaderboard-column {
+    background-color: rgba(255, 255, 255, 0.03); /* Subtle lighter background */
+    border: 1px solid rgba(255, 255, 255, 0.08); /* Clean, faint border */
+    border-radius: 16px; /* The rounded square look */
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2); /* Soft shadow for depth */
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Spacing between the title and the list */
+}
+
+/* Tweak the title so it sits nicely inside the card */
+.leaderboard-column h3 {
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Underline the title */
+    font-size: 1.1em;
+    color: var(--orange, #ff8000); /* Adds a pop of color to the headers */
+}
+
+/* Ensure the list itself doesn't have conflicting padding now that the card has it */
+.leaderboard-container {
+    background: transparent;
+    padding: 0;
+}
+
+/* --- Interactive Letterboxd Hover Effects --- */
+.leaderboard-item {
+    position: relative; /* Crucial: anchors the pop-up to this specific row */
+    cursor: default;
+}
+
+.leaderboard-name {
+    transition: color 0.2s ease;
+}
+
+/* Change name to Letterboxd Green on hover */
+.leaderboard-item:hover .leaderboard-name {
+    color: #00E054; 
+}
+
+/* The hidden pop-up container */
+.hover-tooltip {
+    position: absolute;
+    top: calc(100% + 5px); /* Position slightly below the item */
+    left: 20px;
+    background: #14181c; /* Native Letterboxd dark background */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    z-index: 1000;
+    width: max-content;
+    max-width: 280px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+    pointer-events: none; /* Prevents the tooltip itself from blocking the mouse */
+}
+
+/* Animate the pop-up into view on hover */
+.leaderboard-item:hover .hover-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* The grid inside the pop-up */
+.tooltip-posters {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* 5 mini-posters per row */
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.tooltip-poster {
+    width: 45px;
+    height: 68px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.tooltip-poster-fallback {
+    width: 45px;
+    height: 68px;
+    background: #2c3440;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #89a;
+    font-size: 1.2em;
+}
+
+.tooltip-more {
+    font-size: 0.85em;
+    color: #89a;
+    text-align: right;
+    font-weight: 500;
+}
+
+/* --- Clickable Leaderboard Upgrades --- */
+.leaderboard-item {
+    cursor: pointer !important; /* Indicates they can be clicked */
+}
+
+/* --- Full Profile Screen Styling --- */
+.profile-header {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 30px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-image-container img {
+    width: 185px;
+    border-radius: 12px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-info h2 {
+    margin: 0 0 15px 0;
+    font-size: 2.5em;
+    color: var(--orange);
+}
+
+.bio-container {
+    max-height: 250px;
+    overflow-y: auto; /* Adds a scrollbar if the biography is incredibly long */
+    padding-right: 15px;
+}
+
+.bio-container p {
+    color: #89a;
+    line-height: 1.6;
+    font-size: 1.05em;
+    margin: 0;
+}
+
+/* Custom Scrollbar for the Bio */
+.bio-container::-webkit-scrollbar { width: 6px; }
+.bio-container::-webkit-scrollbar-track { background: transparent; }
+.bio-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }

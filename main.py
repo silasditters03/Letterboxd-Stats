@@ -1,47 +1,53 @@
-import eel
-import tkinter as tk
-from tkinter import filedialog
-import data_processing
+# --- MUST BE AT THE ABSOLUTE TOP ---
+import gevent.monkey
+gevent.monkey.patch_all()
+# -----------------------------------
 
-# Tell Eel to look for the HTML/CSS in the "web" folder
+import eel
+import bottle # NEW: We tap into Eel's hidden web server!
+import data_processing
+import json
+import os
+
 eel.init('web')
 
-@eel.expose
-def get_file_path():
-    """Opens a native OS file dialog so the user can select their zip."""
-    # We use a tiny, hidden Tkinter window just to trigger the file dialog safely
-    root = tk.Tk()
-    root.attributes('-topmost', True) # Keep dialog in front
-    root.withdraw() # Hide the main window
-    
-    file_path = filedialog.askopenfilename(
-        title="Select Letterboxd Zip File", 
-        filetypes=[("Zip files", "*.zip")]
-    )
-    
-    root.destroy()
-    return file_path
+# --- PHASE 3: NATIVE HTTP UPLOADING ---
+@bottle.post('/upload')
+def upload_file():
+    """Receives the raw zip file via HTTP POST instead of WebSockets."""
+    upload = bottle.request.files.get('file')
+    upload.save('temp_letterboxd_data.zip', overwrite=True)
+    return "success"
 
 @eel.expose
-def process_data(file_path):
-    """Passes the file path to the engine and returns the stats to Javascript."""
-    
-    # A callback function that triggers our Javascript progress bar
+def process_data():
+    """Runs the engine on the uploaded file and cleans up. No Base64 needed!"""
     def python_progress_callback(current, total):
-        # Call the JS function named "updateProgress"
         eel.updateProgress(current, total)()
 
+    temp_zip_path = "temp_letterboxd_data.zip"
+
     try:
-        # Run the heavy data engine!
+        print("\n--- STARTING DATA ENGINE ---")
         stats = data_processing.get_homepage_stats(
-            file_path, 
-            max_movies_to_fetch=20, 
+            temp_zip_path, 
+            max_movies_to_fetch=None, 
             progress_callback=python_progress_callback
         )
-        return {"status": "success", "data": stats}
+        
+        raw_json = json.dumps(stats, default=str)
+        clean_json = raw_json.replace('NaN', 'null')
+        clean_stats = json.loads(clean_json)
+        
+        return {"status": "success", "data": clean_stats}
         
     except Exception as e:
+        print(f"PYTHON ERROR: {str(e)}")
         return {"status": "error", "message": str(e)}
+        
+    finally:
+        if os.path.exists(temp_zip_path):
+            os.remove(temp_zip_path)
 
-# Launch the app in a standalone desktop window!
-eel.start('index.html', size=(1100, 850))
+if __name__ == '__main__':
+    eel.start('index.html', size=(1100, 850))
