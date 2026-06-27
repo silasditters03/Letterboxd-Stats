@@ -5,6 +5,7 @@ import time
 import os
 import json
 import sqlite3
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,6 +38,22 @@ def set_cache(key, data):
         conn.execute("INSERT OR REPLACE INTO cache (key, data) VALUES (?, ?)", (key, json.dumps(data)))
 # -----------------------------
 
+def fetch_user_profile(username):
+    """Scrape the Letterboxd profile to find the avatar image."""
+    if not username or username.lower() == "user":
+        return None
+    try:
+        res = requests.get(f"https://letterboxd.com/{username}/", timeout=5)
+        if res.status_code == 200:
+            match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', res.text)
+            if match:
+                url = match.group(1)
+                if 'mac-icon' not in url and 'letterboxd-logo' not in url:
+                    return url
+    except:
+        pass
+    return None
+
 def fetch_person_details(name):
     """Looks up a person and fetches BOTH their image and biography."""
     cache_key = f"person_details_{name}"
@@ -53,7 +70,6 @@ def fetch_person_details(name):
                 profile_path = results[0].get('profile_path')
                 url = f"https://image.tmdb.org/t/p/w185{profile_path}" if profile_path else None
                 
-                # Make a deep request to get the biography text
                 detail_url = f"https://api.themoviedb.org/3/person/{person_id}"
                 detail_response = requests.get(detail_url, headers=HEADERS)
                 bio = ""
@@ -120,7 +136,7 @@ def fetch_poster_and_director(title, year):
     return None, "Unknown"
 
 def fetch_movie_details(title, year):
-    cache_key = f"details_{title}_{year}"
+    cache_key = f"details_v2_{title}_{year}"
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data
         
@@ -150,9 +166,30 @@ def fetch_movie_details(title, year):
             poster_path = data.get('poster_path') or main_poster_path
             poster_url = f"https://image.tmdb.org/t/p/w92{poster_path}" if poster_path else None
             
+            orig_lang_code = data.get('original_language')
+            orig_lang_name = None
+            
+            for l in data.get('spoken_languages', []):
+                if l.get('iso_639_1') == orig_lang_code:
+                    orig_lang_name = l.get('english_name') or l.get('name')
+                    break
+            
+            if not orig_lang_name and orig_lang_code:
+                fallback_map = {
+                    'en': 'English', 'fr': 'French', 'ja': 'Japanese', 'ko': 'Korean', 
+                    'es': 'Spanish', 'it': 'Italian', 'de': 'German', 'zh': 'Mandarin', 
+                    'cn': 'Cantonese', 'ru': 'Russian', 'pt': 'Portuguese', 'hi': 'Hindi',
+                    'sv': 'Swedish', 'da': 'Danish', 'nl': 'Dutch', 'pl': 'Polish', 
+                    'tr': 'Turkish', 'fa': 'Persian', 'no': 'Norwegian', 'fi': 'Finnish', 
+                    'th': 'Thai', 'id': 'Indonesian', 'vi': 'Vietnamese', 'el': 'Greek', 
+                    'cs': 'Czech', 'hu': 'Hungarian', 'he': 'Hebrew', 'tl': 'Tagalog'
+                }
+                orig_lang_name = fallback_map.get(orig_lang_code, orig_lang_code.upper())
+            
             result = {
                 "runtime": runtime, 
                 "countries": [c['name'] for c in data.get('production_countries', [])], 
+                "languages": [orig_lang_name] if orig_lang_name else [], 
                 "directors": list(set(directors)), 
                 "actors": [m['name'] for m in data.get('credits', {}).get('cast', [])],
                 "poster_url": poster_url
@@ -173,6 +210,29 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
             
         total_watched = len(watched_df)
         top_20_df = None
+        extracted_username = "User"
+        favorites_df = pd.DataFrame()
+        
+        # --- NEW: Extract Username automatically from profile.csv ---
+        if 'profile.csv' in file_list:
+            with z.open('profile.csv') as f:
+                profile_df = pd.read_csv(f)
+                
+                if 'Username' in profile_df.columns and not pd.isna(profile_df.iloc[0]['Username']):
+                    extracted_username = str(profile_df.iloc[0]['Username'])
+                    
+                fav_movies = []
+                for i in range(1, 5):
+                    name_col = f'Favorite Film {i} Name'
+                    year_col = f'Favorite Film {i} Year'
+                    if name_col in profile_df.columns and year_col in profile_df.columns:
+                        fav_name = profile_df.iloc[0][name_col]
+                        fav_year = profile_df.iloc[0][year_col]
+                        if pd.notna(fav_name): fav_movies.append({'Name': fav_name, 'Year': fav_year})
+                if fav_movies:
+                    favorites_df = pd.DataFrame(fav_movies)
+                    favorites_df = pd.merge(favorites_df, ratings_df[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
+                    favorites_df['Rating'] = favorites_df['Rating'].fillna('Unrated')
         
         list_files = [f for f in file_list if f.startswith('lists/') and f.endswith('.csv')]
         for file_path in list_files:
@@ -195,23 +255,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
             top_20_df = pd.merge(top_20_df, ratings_df[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
             top_20_df['Rating'] = top_20_df['Rating'].fillna('Unrated')
         else:
-            favorites_df = pd.DataFrame()
-            if 'profile.csv' in file_list:
-                with z.open('profile.csv') as f:
-                    profile_df = pd.read_csv(f)
-                    fav_movies = []
-                    for i in range(1, 5):
-                        name_col = f'Favorite Film {i} Name'
-                        year_col = f'Favorite Film {i} Year'
-                        if name_col in profile_df.columns and year_col in profile_df.columns:
-                            fav_name = profile_df.iloc[0][name_col]
-                            fav_year = profile_df.iloc[0][year_col]
-                            if pd.notna(fav_name): fav_movies.append({'Name': fav_name, 'Year': fav_year})
-                    if fav_movies:
-                        favorites_df = pd.DataFrame(fav_movies)
-                        favorites_df = pd.merge(favorites_df, ratings_df[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
-                        favorites_df['Rating'] = favorites_df['Rating'].fillna('Unrated')
-
             with z.open('diary.csv') as f: diary_df = pd.read_csv(f)
             watch_counts = diary_df.groupby(['Name', 'Year']).size().reset_index(name='watch_count')
             liked_movies = []
@@ -253,7 +296,8 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         movies_to_process['safe_year'] = pd.to_numeric(movies_to_process['Year'], errors='coerce').fillna(0).astype(int)
         
         total_to_process = len(movies_to_process)
-        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_{row.Name}_{row.safe_year}")]
+        
+        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_v2_{row.Name}_{row.safe_year}")]
                 
         if movies_missing_from_cache:
             pool = Pool(40)
@@ -270,17 +314,14 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         director_films = {}
         actor_films = {}
         year_films = {} 
-        country_counts = {} # <--- NEW: Dictionary to track films per country
+        country_films = {} 
+        language_films = {} 
         
         for idx, row in enumerate(movies_to_process.itertuples(index=False)):
             details = fetch_movie_details(row.Name, row.safe_year)
             if details:
                 total_minutes += details['runtime'] * row.play_count
                 unique_countries.update(details['countries'])
-                
-                # --- NEW: Tally up the countries ---
-                for country in details['countries']:
-                    country_counts[country] = country_counts.get(country, 0) + row.play_count
                 
                 movie_obj = {
                     "title": row.Name,
@@ -289,6 +330,12 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                     "poster_url": details.get('poster_url')
                 }
                 
+                for country in details['countries']:
+                    country_films.setdefault(country, []).append(movie_obj)
+                
+                for lang in details.get('languages', []):
+                    language_films.setdefault(lang, []).append(movie_obj)
+                
                 for d in details['directors']: director_films.setdefault(d, []).append(movie_obj)
                 for a in details['actors']: actor_films.setdefault(a, []).append(movie_obj)
                 
@@ -296,9 +343,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 
             if not movies_missing_from_cache and progress_callback: progress_callback(idx + 1, total_to_process)
             
-        # --- BUILD LEADERBOARDS ---
-        
-        # 1. Top Watched
         top_directors = []
         for name, films in director_films.items():
             top_directors.append({"name": name, "count": sum(f['play_count'] for f in films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)})
@@ -309,7 +353,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
             top_actors.append({"name": name, "count": sum(f['play_count'] for f in films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)})
         top_actors = sorted(top_actors, key=lambda x: x['count'], reverse=True)[:10]
 
-        # 2. Top Rated (Minimum 3 rated films)
         MIN_RATED_FILMS = 3
         
         top_rated_directors = []
@@ -326,7 +369,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 top_rated_actors.append({"name": name, "avg_rating": sum(f['rating'] for f in rated) / len(rated), "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)})
         top_rated_actors = sorted(top_rated_actors, key=lambda x: (x['avg_rating'], x['count']), reverse=True)[:10]
 
-        # Fetch biographies and pack UI payload
         for group in [top_directors, top_actors, top_rated_directors, top_rated_actors]:
             for p in group:
                 details = fetch_person_details(p['name'])
@@ -338,7 +380,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 del p['films'] 
                 if 'avg_rating' in p: p['avg_rating'] = round(p['avg_rating'], 2)
 
-        # --- CONTINUOUS YEARLY HISTOGRAMS ---
         valid_years_df = movies_to_process[movies_to_process['safe_year'] > 0].copy()
         
         if not valid_years_df.empty:
@@ -362,18 +403,34 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
             
             yearly_stats_list = yearly_stats_df.to_dict('records')
             
-            # Attach the movies to each year and sort them by rating
             for y_stat in yearly_stats_list:
                 y_stat['films'] = sorted(year_films.get(y_stat['year'], []), key=lambda x: (x['rating'], x['play_count']), reverse=True)
         else:
             yearly_stats_list = []
+        
+    # Launch background fetch using extracted username
+    avatar_url = fetch_user_profile(extracted_username)
             
     return {
+        "username": extracted_username,
+        "avatar_url": avatar_url,
         "total_watched": total_watched, "top_20": top_20_list, "total_hours": round(total_minutes / 60, 1),
         "total_countries": len(unique_countries), "total_directors": len(director_films), 
         "top_directors_list": top_directors, "top_actors_list": top_actors,
         "top_rated_directors_list": top_rated_directors, "top_rated_actors_list": top_rated_actors,
         "yearly_stats": yearly_stats_list,
-        # --- NEW: Format the dictionary into a clean list for Google Charts ---
-        "country_stats": [{"Country": k, "Count": v} for k, v in country_counts.items()] 
+        "country_stats": [
+            {
+                "Country": k, 
+                "Count": sum(f['play_count'] for f in v), 
+                "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)
+            } for k, v in country_films.items()
+        ],
+        "language_stats": sorted([
+            {
+                "Language": k,
+                "Count": sum(f['play_count'] for f in v),
+                "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)
+            } for k, v in language_films.items()
+        ], key=lambda x: x['Count'], reverse=True)
     }

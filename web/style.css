@@ -429,32 +429,14 @@ h1 { font-size: 32px; margin-bottom: 10px; }
 .bio-container::-webkit-scrollbar-track { background: transparent; }
 .bio-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
 
-/* --- World Map Overrides --- */
-/* Force Letterboxd blue on hover for all map regions */
-#regions_div path:hover {
-    fill: #40bcf4 !important;
-    opacity: 1 !important;
-    cursor: pointer;
-}
-
-/* Remove default Google tooltip styling to use our custom HTML */
-.google-visualization-tooltip {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-/* --- World Map Overrides --- */
-
-/* Remove default Google tooltip styling to use our custom HTML */
-.google-visualization-tooltip {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-.google-visualization-tooltip {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
+/* --- jsVectorMap Custom Tooltip --- */
+.jvm-tooltip {
+    background-color: #2c3440;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px; /* Sharper, more square edges */
+    padding: 10px 16px;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6); /* Deeper drop shadow to make it float */
+    pointer-events: none;
+    z-index: 1000;
 }

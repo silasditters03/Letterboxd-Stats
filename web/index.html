@@ -8,6 +8,11 @@
     <script type="text/javascript" src="/eel.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    
+    <!-- Map Dependencies -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap/dist/css/jsvectormap.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/jsvectormap"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsvectormap/dist/maps/world.js"></script>
 </head>
 <body>
 
@@ -37,6 +42,17 @@
         </div>
 
         <div id="overview-tab" class="tab-content active">
+            
+            <!-- Welcome Section -->
+            <div id="welcome-section" class="panel" style="margin-bottom: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px;">
+                <img id="welcome-avatar" src="" alt="Profile Picture" style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--lb-blue, #40bcf4); margin-bottom: 15px; display: none; object-fit: cover; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">
+                <h2 style="font-size: 2.2em; margin-bottom: 5px;">Welcome, <span id="welcome-username" style="color: var(--orange);">User</span>!</h2>
+                <p style="color: var(--text-muted); font-size: 1.1em; margin-bottom: 20px;">Here are your all-time cinema statistics.</p>
+                <div style="font-size: 0.85em; color: rgba(255,255,255,0.3); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; width: 100%; text-align: center;">
+                    Made by Silas Ditters
+                </div>
+            </div>
+
             <div class="stats-row">
                 <div class="stat-card">
                     <span class="stat-title">Total Films</span>
@@ -100,15 +116,27 @@
         </div>
 
         <div id="map-tab" class="tab-content hidden">
+            <!-- Map Panel -->
             <div class="panel">
                 <h2 class="section-title">🌍 World Cinema Map</h2>
                 <p style="color: #89a; margin-bottom: 20px;">Interactive map of every country represented in your watched films.</p>
                 <div id="regions_div" style="width: 100%; height: 500px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);"></div>
             </div>
+
+            <!-- Dedicated Languages Panel -->
+            <div class="panel" style="margin-top: 30px;">
+                <div class="leaderboard-column" style="text-align: left; max-width: 600px; margin: 0 auto;">
+                    <h3>Most Watched Languages</h3>
+                    <div id="languages-list" class="leaderboard-container"></div>
+                    <div id="extra-languages" class="hidden"></div>
+                    <button id="toggle-languages-btn" class="btn" style="width: 100%; margin-top: 15px; background: rgba(255,255,255,0.03); color: #89a; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;">Show More ↓</button>
+                </div>
+            </div>
         </div>
 
     </div>
 
+    <!-- --- Year Screen --- -->
     <div id="year-screen" class="hidden">
         <button id="back-to-dashboard-from-year" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
         
@@ -126,6 +154,7 @@
         <div id="year-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
+    <!-- --- Profile Screen --- -->
     <div id="profile-screen" class="hidden">
         <button id="back-to-dashboard" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
         
@@ -146,6 +175,42 @@
         </h3>
         
         <div id="profile-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
+    </div>
+
+    <!-- --- Country Screen --- -->
+    <div id="country-screen" class="hidden">
+        <button id="back-to-dashboard-from-country" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
+        
+        <div class="profile-header">
+            <div class="profile-info">
+                <h2 id="country-title" style="font-size: 3.5em; color: #40bcf4; margin: 0;">Country Name</h2>
+                <p id="country-stats" style="color: #00E054; font-size: 1.2em; margin-top: 10px;">0 films watched</p>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            Watched Films
+        </h3>
+        
+        <div id="country-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
+    </div>
+
+    <!-- --- Language Screen --- -->
+    <div id="language-screen" class="hidden">
+        <button id="back-to-dashboard-from-language" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
+        
+        <div class="profile-header">
+            <div class="profile-info">
+                <h2 id="language-title" style="font-size: 3.5em; color: #ff8000; margin: 0;">Language Name</h2>
+                <p id="language-stats" style="color: #00E054; font-size: 1.2em; margin-top: 10px;">0 films watched</p>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+            Watched Films
+        </h3>
+        
+        <div id="language-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
     <script src="script.js"></script>

@@ -4,14 +4,13 @@ gevent.monkey.patch_all()
 # -----------------------------------
 
 import eel
-import bottle # NEW: We tap into Eel's hidden web server!
+import bottle
 import data_processing
 import json
 import os
 
 eel.init('web')
 
-# --- PHASE 3: NATIVE HTTP UPLOADING ---
 @bottle.post('/upload')
 def upload_file():
     """Receives the raw zip file via HTTP POST instead of WebSockets."""
@@ -21,7 +20,7 @@ def upload_file():
 
 @eel.expose
 def process_data():
-    """Runs the engine on the uploaded file and cleans up. No Base64 needed!"""
+    """Runs the engine on the uploaded file and cleans up."""
     def python_progress_callback(current, total):
         eel.updateProgress(current, total)()
 

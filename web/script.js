@@ -2,12 +2,22 @@
 let selectedFile = null;
 window.personData = {}; 
 window.yearData = {};   
-window.globalStats = null; // Used to feed data to the map when the tab is opened
+window.globalStats = null; 
 let countChartInstance = null;
 let ratingChartInstance = null;
 
-// Initialize Google Charts
-google.charts.load('current', { 'packages': ['geochart'] });
+// --- FLAG DICTIONARY (ISO Codes for FlagCDN) ---
+const languageToCountryCode = {
+    "English": "us", "Japanese": "jp", "French": "fr", "Korean": "kr",
+    "Spanish": "es", "Italian": "it", "German": "de", "Mandarin": "cn",
+    "Cantonese": "hk", "Russian": "ru", "Portuguese": "br", "Hindi": "in",
+    "Arabic": "sa", "Swedish": "se", "Danish": "dk", "Dutch": "nl",
+    "Polish": "pl", "Turkish": "tr", "Persian": "ir", "Norwegian": "no",
+    "Finnish": "fi", "Thai": "th", "Indonesian": "id", "Vietnamese": "vn",
+    "Greek": "gr", "Czech": "cz", "Hungarian": "hu", "Hebrew": "il",
+    "Tagalog": "ph", "Romanian": "ro", "Ukrainian": "ua", "Malayalam": "in",
+    "Tamil": "in", "Telugu": "in", "Bengali": "in", "Urdu": "pk"
+};
 
 // 1. Hook up the UI elements
 const fileInput = document.getElementById('file-input');
@@ -175,117 +185,65 @@ const customChartTooltipHandler = (context) => {
 };
 
 
-// --- MAP DRAWING LOGIC ---
+// --- INTERACTIVE MAP DRAWING LOGIC (jsVectorMap) ---
 function drawMap(countryData) {
-    var data = new google.visualization.DataTable();
-    data.addColumn('string', 'Country');
-    data.addColumn('number', 'Films Watched');
-    data.addColumn({'type': 'string', 'role': 'tooltip', 'p': {'html': true}}); // Enables custom HTML Tooltips
+    const container = document.getElementById('regions_div');
+    container.innerHTML = ""; 
 
-    // Comprehensive list of full country names recognized by Google
-    const baselineNames = [
-        "Afghanistan","Albania","Algeria","American Samoa","Andorra","Angola","Anguilla","Antarctica","Antigua and Barbuda","Argentina","Armenia","Aruba","Australia","Austria","Azerbaijan",
-        "The Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bermuda","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi",
-        "Cambodia","Cameroon","Canada","Cape Verde","Cayman Islands","Central African Republic","Chad","Chile","China","Colombia","Comoros","CG","Costa Rica","Croatia","Cuba","Cyprus","Czech Republic",
-        "Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany",
-        "Ghana","Greece","Greenland","Grenada","Guadeloupe","Guam","Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hong Kong","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland",
-        "Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg",
-        "Macao","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Martinique","Mauritania","Mauritius","Mayotte","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro",
-        "Montserrat","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","New Caledonia","New Zealand","Nicaragua","Niger","Nigeria","Niue","Norfolk Island","North Korea","North Macedonia",
-        "Northern Mariana Islands","Norway","Oman","Pakistan","Palau","PS","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Pitcairn","Poland","Portugal","Puerto Rico","Qatar",
-        "Reunion","Romania","RU","Rwanda","Saint Helena","Saint Kitts and Nevis","Saint Lucia","Saint Pierre and Miquelon","Saint Vincent and the Grenadines","Samoa","San Marino","Sao Tome and Principe",
-        "Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","KR","South Sudan","Spain","Sri Lanka","Sudan","Suriname",
-        "Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tokelau","Tonga","Trinidad and Barbuda","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine",
-        "United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Venezuela","Vietnam","Western Sahara","Yemen","Zambia","Zimbabwe"
-    ];
+    const nameToCode = {
+        "United States": "US", "United States of America": "US", "Canada": "CA", "United Kingdom": "GB",
+        "France": "FR", "Germany": "DE", "Japan": "JP", "South Korea": "KR", "Italy": "IT",
+        "Spain": "ES", "India": "IN", "China": "CN", "Australia": "AU", "Brazil": "BR",
+        "Mexico": "MX", "Russia": "RU", "Sweden": "SE", "Denmark": "DK", "Ireland": "IE",
+        "New Zealand": "NZ", "Netherlands": "NL", "Norway": "NO", "Poland": "PL",
+        "Argentina": "AR", "Belgium": "BE", "Switzerland": "CH", "Austria": "AT",
+        "Finland": "FI", "Czech Republic": "CZ", "Hungary": "HU", "Greece": "GR",
+        "Turkey": "TR", "Taiwan": "TW", "Hong Kong": "HK", "South Africa": "ZA",
+        "Iran": "IR", "Chile": "CL", "Colombia": "CO", "Portugal": "PT", "Romania": "RO",
+        "Israel": "IL", "Thailand": "TH", "Indonesia": "ID", "Philippines": "PH"
+    };
 
-    let mapData = {};
-    baselineNames.forEach(name => { mapData[name] = 0; });
+    let mapValues = {};
+    let codeToName = {}; 
 
-    let maxCount = 1;
     if (countryData) {
         countryData.forEach(c => {
-            let name = c.Country;
-            
-            // Fix strict TMDb strings to Google Chart's preferred codes
-            if (name === "United States of America") name = "United States";
-            if (name === "Russia") name = "RU"; 
-            if (name === "South Korea") name = "KR";
-            if (name === "Palestine") name = "PS";
-            if (name === "Congo") name = "CG";
-            if (name === "Bahamas") name = "The Bahamas";
-            
-            if (mapData[name] !== undefined) {
-                mapData[name] = c.Count;
-            } else {
-                mapData[name] = c.Count; 
-            }
-            if (c.Count > maxCount) maxCount = c.Count;
+            let code = nameToCode[c.Country] || c.Country;
+            mapValues[code] = c.Count;
+            codeToName[code] = c.Country; 
         });
     }
 
-    const rows = Object.keys(mapData).map(countryName => {
-        const count = mapData[countryName];
-        
-        // Custom HTML tooltip block
-        const tooltipHTML = `
-            <div style="background: #445566; padding: 12px 18px; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; text-align: center; border: 1px solid rgba(255,255,255,0.1); pointer-events: none;">
-                <div style="font-weight: bold; color: #fff; margin-bottom: 5px; font-size: 14px;">${countryName === 'United States' ? 'USA' : countryName}</div>
-                <div style="color: #9ab; font-size: 12px;">Films watched: ${count}</div>
-            </div>
-        `;
-        return [countryName, count, tooltipHTML];
-    });
-    
-    data.addRows(rows);
-
-    var options = {
+    new jsVectorMap({
+        selector: '#regions_div',
+        map: 'world',
         backgroundColor: 'transparent',
-        datalessRegionColor: '#0a170f', // Match the '0' color to keep it seamless
-        tooltip: { isHtml: true },
-        colorAxis: { 
-            values: [0, 1, maxCount], 
-            // 0 = Darkest Green, 1 = Mid Green, Max = Brightest Light Green
-            colors: ['#0a170f', '#184226', '#00E054'] 
+        zoomOnScroll: false,
+        regionStyle: {
+            initial: { fill: '#0a170f', stroke: 'rgba(255,255,255,0.1)', strokeWidth: 0.5 },
+            hover: { fill: '#40bcf4', fillOpacity: 1 }
         },
-        legend: 'none'
-    };
+        visualizeData: { scale: ['#184226', '#00E054'], values: mapValues },
+        onRegionTooltipShow(event, tooltip, code) {
+            let count = mapValues[code] || 0;
+            let countryName = tooltip.text();
+            if (countryName === "United States") countryName = "USA";
 
-    const container = document.getElementById('regions_div');
-    var chart = new google.visualization.GeoChart(container);
-
-    // --- UPGRADED: High-Speed Watchdog ---
-    const observer = new MutationObserver(() => {
-        // 1. Kill the native black floating text instantly
-        const titles = container.querySelectorAll('title');
-        titles.forEach(t => t.remove());
-
-        // 2. Intercept Google's group highlighting and force it to be Blue
-        const paths = container.querySelectorAll('path');
-        paths.forEach(p => {
-            const sw = p.getAttribute('stroke-width');
-            // When Google natively hovers a country, it bumps the stroke-width > 1
-            if (sw && parseFloat(sw) > 1) {
-                p.style.setProperty('fill', '#40bcf4', 'important');
-                p.style.setProperty('stroke', '#40bcf4', 'important');
-                p.style.setProperty('stroke-width', '1', 'important'); // Keeps the border clean
-            } else {
-                // If not hovered, remove our blue and let Google return it to green
-                p.style.removeProperty('fill');
-                p.style.removeProperty('stroke');
+            tooltip.text(
+                `<div style="text-align: center;">
+                    <div style="font-weight: bold; color: #fff; font-size: 14px; margin-bottom: 5px;">${countryName}</div>
+                    <div style="color: #9ab; font-size: 12px;">Films watched: ${count}</div>
+                </div>`, 
+                true
+            );
+        },
+        onRegionClick(event, code) {
+            let countryName = codeToName[code];
+            if (countryName && mapValues[code] > 0) {
+                showCountryProfile(countryName);
             }
-        });
+        }
     });
-
-    // We MUST observe 'attributes' so we catch Google changing the stroke-width
-    observer.observe(container, { 
-        childList: true, 
-        subtree: true, 
-        attributes: true, 
-        attributeFilter: ['stroke-width', 'fill'] 
-    });
-
-    chart.draw(data, options);
 }
 
 
@@ -298,6 +256,23 @@ function buildDashboard(stats) {
     document.getElementById('dashboard-screen').classList.remove('hidden');
     document.getElementById('dashboard-screen').classList.add('active');
     
+    // --- Set Welcome Section ---
+    const welcomeUser = document.getElementById('welcome-username');
+    const welcomeAvatar = document.getElementById('welcome-avatar');
+    
+    if (stats.username && stats.username !== "User") {
+        welcomeUser.innerText = stats.username;
+    } else {
+        welcomeUser.innerText = "Cinephile";
+    }
+
+    if (stats.avatar_url) {
+        welcomeAvatar.src = stats.avatar_url;
+        welcomeAvatar.style.display = "block";
+    } else {
+        welcomeAvatar.style.display = "none";
+    }
+
     document.getElementById('stat-total').innerText = stats.total_watched;
     document.getElementById('stat-hours').innerText = stats.total_hours;
     document.getElementById('stat-countries').innerText = stats.total_countries;
@@ -358,6 +333,59 @@ function buildDashboard(stats) {
         });
     });
 
+    // --- Populate Languages Leaderboard with Images & Toggle ---
+    const langListEl = document.getElementById('languages-list');
+    const extraLangEl = document.getElementById('extra-languages');
+    const toggleLangBtn = document.getElementById('toggle-languages-btn');
+
+    if (langListEl && extraLangEl && toggleLangBtn && stats.language_stats) {
+        langListEl.innerHTML = "";
+        extraLangEl.innerHTML = "";
+        
+        if (stats.language_stats.length <= 10) {
+            toggleLangBtn.style.display = "none";
+        } else {
+            toggleLangBtn.style.display = "block";
+        }
+
+        stats.language_stats.forEach((lang, index) => {
+            let code = languageToCountryCode[lang.Language];
+            let safeLangName = lang.Language.replace(/'/g, "\\'");
+            
+            let iconHTML = code 
+                ? `<img src="https://flagcdn.com/w40/${code}.png" style="width: 24px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.5);" alt="${lang.Language} flag">`
+                : `<span style="font-size: 18px; color: #89a;">🌐</span>`;
+            
+            let itemHTML = `
+                <div class="leaderboard-item" onclick="showLanguageProfile('${safeLangName}')">
+                    <div class="leaderboard-left">
+                        <div style="width: 30px; display: flex; justify-content: center; align-items: center;">
+                            ${iconHTML}
+                        </div>
+                        <span class="leaderboard-name">${index + 1}. ${lang.Language}</span>
+                    </div>
+                    <span class="leaderboard-count">${lang.Count} films</span>
+                </div>
+            `;
+
+            if (index < 10) {
+                langListEl.innerHTML += itemHTML;
+            } else {
+                extraLangEl.innerHTML += itemHTML;
+            }
+        });
+
+        toggleLangBtn.onclick = function() {
+            if (extraLangEl.classList.contains('hidden')) {
+                extraLangEl.classList.remove('hidden');
+                toggleLangBtn.innerText = "Show Less ↑";
+            } else {
+                extraLangEl.classList.add('hidden');
+                toggleLangBtn.innerText = "Show More ↓";
+            }
+        };
+    }
+
     // Build Interactive Histograms
     if (stats.yearly_stats && stats.yearly_stats.length > 0) {
         const years = stats.yearly_stats.map(d => d.year);
@@ -374,11 +402,7 @@ function buildDashboard(stats) {
             maintainAspectRatio: false, 
             plugins: { 
                 legend: { display: false },
-                tooltip: { 
-                    enabled: false,
-                    position: 'nearest',
-                    external: customChartTooltipHandler 
-                }
+                tooltip: { enabled: false, position: 'nearest', external: customChartTooltipHandler }
             }, 
             scales: { 
                 x: { grid: { display: false }, ticks: { color: '#89a' } }, 
@@ -489,6 +513,72 @@ function showYearProfile(year) {
     window.scrollTo(0, 0); 
 }
 
+// 8.5 Country Wiki Screen Logic
+function showCountryProfile(countryName) {
+    const cData = window.globalStats.country_stats.find(c => c.Country === countryName);
+    if (!cData || !cData.films || cData.films.length === 0) return;
+
+    document.getElementById('dashboard-screen').classList.add('hidden');
+    document.getElementById('dashboard-screen').classList.remove('active');
+    document.getElementById('country-screen').classList.remove('hidden');
+    document.getElementById('country-screen').classList.add('active');
+
+    let displayTitle = countryName === "United States of America" ? "United States" : countryName;
+
+    document.getElementById('country-title').innerText = displayTitle;
+    document.getElementById('country-stats').innerText = `${cData.Count} films watched`;
+
+    const grid = document.getElementById('country-movies-grid');
+    grid.innerHTML = "";
+    
+    cData.films.forEach(film => {
+        const card = document.createElement('div');
+        card.className = `poster-card small`;
+        let overlayText = `${film.title}<br>${film.rating > 0 ? film.rating + '★' : ''}`;
+        
+        if (film.poster_url) {
+            card.innerHTML = `<img src="${film.poster_url}" class="poster-img" alt="${film.title}"><div class="poster-overlay">${overlayText}</div>`;
+        } else {
+            card.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.title}</div><div class="poster-overlay">${overlayText}</div>`;
+        }
+        grid.appendChild(card);
+    });
+    
+    window.scrollTo(0, 0); 
+}
+
+// 8.7 Language Wiki Screen Logic
+function showLanguageProfile(languageName) {
+    const lData = window.globalStats.language_stats.find(l => l.Language === languageName);
+    if (!lData || !lData.films || lData.films.length === 0) return;
+
+    document.getElementById('dashboard-screen').classList.add('hidden');
+    document.getElementById('dashboard-screen').classList.remove('active');
+    document.getElementById('language-screen').classList.remove('hidden');
+    document.getElementById('language-screen').classList.add('active');
+
+    document.getElementById('language-title').innerText = languageName;
+    document.getElementById('language-stats').innerText = `${lData.Count} films watched`;
+
+    const grid = document.getElementById('language-movies-grid');
+    grid.innerHTML = "";
+    
+    lData.films.forEach(film => {
+        const card = document.createElement('div');
+        card.className = `poster-card small`;
+        let overlayText = `${film.title}<br>${film.rating > 0 ? film.rating + '★' : ''}`;
+        
+        if (film.poster_url) {
+            card.innerHTML = `<img src="${film.poster_url}" class="poster-img" alt="${film.title}"><div class="poster-overlay">${overlayText}</div>`;
+        } else {
+            card.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.title}</div><div class="poster-overlay">${overlayText}</div>`;
+        }
+        grid.appendChild(card);
+    });
+    
+    window.scrollTo(0, 0); 
+}
+
 // 9. Back Button Events
 document.getElementById('back-to-dashboard').addEventListener('click', () => {
     document.getElementById('profile-screen').classList.add('hidden');
@@ -500,6 +590,20 @@ document.getElementById('back-to-dashboard').addEventListener('click', () => {
 document.getElementById('back-to-dashboard-from-year').addEventListener('click', () => {
     document.getElementById('year-screen').classList.add('hidden');
     document.getElementById('year-screen').classList.remove('active');
+    document.getElementById('dashboard-screen').classList.remove('hidden');
+    document.getElementById('dashboard-screen').classList.add('active');
+});
+
+document.getElementById('back-to-dashboard-from-country').addEventListener('click', () => {
+    document.getElementById('country-screen').classList.add('hidden');
+    document.getElementById('country-screen').classList.remove('active');
+    document.getElementById('dashboard-screen').classList.remove('hidden');
+    document.getElementById('dashboard-screen').classList.add('active');
+});
+
+document.getElementById('back-to-dashboard-from-language').addEventListener('click', () => {
+    document.getElementById('language-screen').classList.add('hidden');
+    document.getElementById('language-screen').classList.remove('active');
     document.getElementById('dashboard-screen').classList.remove('hidden');
     document.getElementById('dashboard-screen').classList.add('active');
 });
@@ -519,7 +623,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         targetContent.classList.remove('hidden');
         targetContent.classList.add('active');
 
-        // Draw the map ONLY when the map tab is opened
         if (targetId === 'map-tab' && window.globalStats) {
             drawMap(window.globalStats.country_stats);
         }
