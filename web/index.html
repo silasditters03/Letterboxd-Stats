@@ -5,11 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Letterboxd Stats</title>
     <link rel="stylesheet" href="style.css">
+    
+    <style>
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .3s; border-radius: 24px; border: 1px solid rgba(255,255,255,0.2); }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #89a; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: rgba(0, 224, 84, 0.2); border-color: #00E054; }
+        input:checked + .slider:before { transform: translateX(20px); background-color: #00E054; }
+    </style>
+
     <script type="text/javascript" src="/eel.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     
-    <!-- Map Dependencies -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap/dist/css/jsvectormap.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/jsvectormap"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsvectormap/dist/maps/world.js"></script>
@@ -43,7 +52,6 @@
 
         <div id="overview-tab" class="tab-content active">
             
-            <!-- Welcome Section -->
             <div id="welcome-section" class="panel" style="margin-bottom: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px;">
                 <img id="welcome-avatar" src="" alt="Profile Picture" style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--lb-blue, #40bcf4); margin-bottom: 15px; display: none; object-fit: cover; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">
                 <h2 style="font-size: 2.2em; margin-bottom: 5px;">Welcome, <span id="welcome-username" style="color: var(--orange);">User</span>!</h2>
@@ -76,25 +84,54 @@
                 <h2 class="section-title">🏆 Top 20 Films</h2>
                 <div id="poster-grid" class="grid-container"></div>
                 
-                <div class="charts-container" style="margin-top: 40px;">
-                    <div class="leaderboard-column" style="margin-bottom: 25px;">
+                <div class="charts-container" style="display: flex; flex-direction: column; gap: 40px; margin-top: 50px;">
+                    <div class="leaderboard-column" style="width: 100%;">
                         <h3 style="color: #00E054;">Films by Release Year</h3>
-                        <div style="position: relative; height: 250px; width: 100%;">
-                            <canvas id="yearCountChart"></canvas>
-                        </div>
+                        <div style="position: relative; height: 250px; width: 100%;"><canvas id="yearCountChart"></canvas></div>
                     </div>
-            
-                    <div class="leaderboard-column">
-                        <h3 style="color: var(--orange);">Average Rating by Release Year</h3>
-                        <div style="position: relative; height: 250px; width: 100%;">
-                            <canvas id="yearRatingChart"></canvas>
-                        </div>
+                    <div class="leaderboard-column" style="width: 100%;">
+                        <h3 style="color: var(--lb-blue);">Average Rating by Release Year</h3>
+                        <div style="position: relative; height: 250px; width: 100%;"><canvas id="yearRatingChart"></canvas></div>
+                    </div>
+                    <div class="leaderboard-column" style="width: 100%;">
+                        <h3 style="color: #ff8000;">Genre Distribution</h3>
+                        <div style="position: relative; height: 250px; width: 100%;"><canvas id="genreChart"></canvas></div>
+                    </div>
+                    <div class="leaderboard-column" style="width: 100%;">
+                        <h3 style="color: white;">Rating Curve</h3>
+                        <div style="position: relative; height: 250px; width: 100%;"><canvas id="ratingCurveChart"></canvas></div>
                     </div>
                 </div>
+
+                <h3 class="section-title" style="margin-top: 50px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 30px;">📊 Cinematic Milestones</h3>
+                <div id="milestone-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-bottom: 40px;"></div>
+
+                <h3 class="section-title" style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 30px;">⚖️ Biggest Rating Differences</h3>
+                <div class="leaderboard-grid" style="margin-bottom: 20px;">
+                    <div class="leaderboard-column">
+                        <h3>Unpopular Favorites (You > TMDB)</h3>
+                        <div id="diff-positive-list" class="leaderboard-container"></div>
+                    </div>
+                    <div class="leaderboard-column">
+                        <h3>Popular Dislikes (You < TMDB)</h3>
+                        <div id="diff-negative-list" class="leaderboard-container"></div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
         <div id="cast-tab" class="tab-content hidden">
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="color: var(--text-muted); font-size: 14px; font-weight: bold; text-transform: uppercase;">Include Rewatches</span>
+                    <label class="switch">
+                        <input type="checkbox" id="rewatch-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+
             <div class="leaderboard-grid"> 
                 <div class="leaderboard-column">
                     <h3>Most Watched Actors</h3>
@@ -116,14 +153,11 @@
         </div>
 
         <div id="map-tab" class="tab-content hidden">
-            <!-- Map Panel -->
             <div class="panel">
                 <h2 class="section-title">🌍 World Cinema Map</h2>
                 <p style="color: #89a; margin-bottom: 20px;">Interactive map of every country represented in your watched films.</p>
                 <div id="regions_div" style="width: 100%; height: 500px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);"></div>
             </div>
-
-            <!-- Dedicated Languages Panel -->
             <div class="panel" style="margin-top: 30px;">
                 <div class="leaderboard-column" style="text-align: left; max-width: 600px; margin: 0 auto;">
                     <h3>Most Watched Languages</h3>
@@ -133,83 +167,86 @@
                 </div>
             </div>
         </div>
-
     </div>
 
-    <!-- --- Year Screen --- -->
-    <div id="year-screen" class="hidden">
+    <div id="year-screen" class="hidden screen-overlay">
         <button id="back-to-dashboard-from-year" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
-        
         <div class="profile-header">
             <div class="profile-info">
                 <h2 id="year-title" style="font-size: 3.5em; color: #00E054; margin: 0;">YYYY</h2>
                 <p id="year-stats" style="color: #89a; font-size: 1.2em; margin-top: 10px;">X films • ★ Y Avg</p>
             </div>
         </div>
-
-        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-            Films Released in <span id="year-subtitle">YYYY</span>
-        </h3>
-        
+        <div class="list-header">
+            <h3>Films Released in <span id="year-subtitle">YYYY</span></h3>
+            <select id="sort-year" class="sort-dropdown">
+                <option value="rating">Your Highest Rated</option>
+                <option value="avg_rating">Highest Avg Rating</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            </select>
+        </div>
         <div id="year-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
-    <!-- --- Profile Screen --- -->
-    <div id="profile-screen" class="hidden">
+    <div id="profile-screen" class="hidden screen-overlay">
         <button id="back-to-dashboard" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
-        
         <div class="profile-header">
-            <div class="profile-image-container">
-                <img id="profile-image" src="" alt="">
-            </div>
+            <div class="profile-image-container"><img id="profile-image" src="" alt=""></div>
             <div class="profile-info">
                 <h2 id="profile-name">Name</h2>
-                <div class="bio-container">
-                    <p id="profile-bio">Biography goes here...</p>
-                </div>
+                <div class="bio-container"><p id="profile-bio">Biography goes here...</p></div>
             </div>
         </div>
-
-        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-            Watched Films
-        </h3>
-        
+        <div class="list-header">
+            <h3>Watched Films</h3>
+            <select id="sort-profile" class="sort-dropdown">
+                <option value="rating">Your Highest Rated</option>
+                <option value="avg_rating">Highest Avg Rating</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            </select>
+        </div>
         <div id="profile-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
-    <!-- --- Country Screen --- -->
-    <div id="country-screen" class="hidden">
+    <div id="country-screen" class="hidden screen-overlay">
         <button id="back-to-dashboard-from-country" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
-        
         <div class="profile-header">
             <div class="profile-info">
                 <h2 id="country-title" style="font-size: 3.5em; color: #40bcf4; margin: 0;">Country Name</h2>
                 <p id="country-stats" style="color: #00E054; font-size: 1.2em; margin-top: 10px;">0 films watched</p>
             </div>
         </div>
-
-        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-            Watched Films
-        </h3>
-        
+        <div class="list-header">
+            <h3>Watched Films</h3>
+            <select id="sort-country" class="sort-dropdown">
+                <option value="rating">Your Highest Rated</option>
+                <option value="avg_rating">Highest Avg Rating</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            </select>
+        </div>
         <div id="country-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 
-    <!-- --- Language Screen --- -->
-    <div id="language-screen" class="hidden">
+    <div id="language-screen" class="hidden screen-overlay">
         <button id="back-to-dashboard-from-language" class="btn orange" style="margin-bottom: 30px;">← Back to Dashboard</button>
-        
         <div class="profile-header">
             <div class="profile-info">
                 <h2 id="language-title" style="font-size: 3.5em; color: #ff8000; margin: 0;">Language Name</h2>
                 <p id="language-stats" style="color: #00E054; font-size: 1.2em; margin-top: 10px;">0 films watched</p>
             </div>
         </div>
-
-        <h3 style="margin-top: 40px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-            Watched Films
-        </h3>
-        
+        <div class="list-header">
+            <h3>Watched Films</h3>
+            <select id="sort-language" class="sort-dropdown">
+                <option value="rating">Your Highest Rated</option>
+                <option value="avg_rating">Highest Avg Rating</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            </select>
+        </div>
         <div id="language-movies-grid" class="grid-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;"></div>
     </div>
 

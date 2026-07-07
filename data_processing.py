@@ -36,10 +36,8 @@ def get_cache(key):
 def set_cache(key, data):
     with sqlite3.connect(DB_FILE) as conn:
         conn.execute("INSERT OR REPLACE INTO cache (key, data) VALUES (?, ?)", (key, json.dumps(data)))
-# -----------------------------
 
 def fetch_user_profile(username):
-    """Scrape the Letterboxd profile to find the avatar image."""
     if not username or username.lower() == "user":
         return None
     try:
@@ -55,7 +53,6 @@ def fetch_user_profile(username):
     return None
 
 def fetch_person_details(name):
-    """Looks up a person and fetches BOTH their image and biography."""
     cache_key = f"person_details_{name}"
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data
@@ -81,33 +78,68 @@ def fetch_person_details(name):
                 return data
     except Exception:
         pass
-    
     return {"image_url": None, "biography": ""}
 
 def get_tmdb_match(title, year):
-    title_encoded = requests.utils.quote(str(title))
-    years_to_try = [year, year - 1, year + 1] if year else [0]
+    title_str = str(title)
+    title_encoded = requests.utils.quote(title_str)
     
-    for y in years_to_try:
-        if y == 0: continue
-        res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}&year={y}", headers=HEADERS)
-        results = res.json().get('results', [])
-        if results: return 'movie', results[0]['id'], results[0].get('poster_path')
+    def clean_string(s):
+        return re.sub(r'[^a-z0-9]', '', str(s).lower()) if s else ""
+    
+    target_clean = clean_string(title_str)
+    target_year = int(year) if year else 0
+    candidates = []
+    
+    try:
+        movie_res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
+        if movie_res.status_code == 200:
+            for r in movie_res.json().get('results', []):
+                r['media_type'] = 'movie'
+                candidates.append(r)
+    except Exception:
+        pass
         
-        res = requests.get(f"https://api.themoviedb.org/3/search/tv?query={title_encoded}&first_air_date_year={y}", headers=HEADERS)
-        results = res.json().get('results', [])
-        if results: return 'tv', results[0]['id'], results[0].get('poster_path')
+    try:
+        tv_res = requests.get(f"https://api.themoviedb.org/3/search/tv?query={title_encoded}", headers=HEADERS)
+        if tv_res.status_code == 200:
+            for r in tv_res.json().get('results', []):
+                r['media_type'] = 'tv'
+                candidates.append(r)
+    except Exception:
+        pass
+
+    best_candidate = None
+    best_score = -1
+    
+    for c in candidates:
+        c_title = c.get('title') if c['media_type'] == 'movie' else c.get('name')
+        c_orig_title = c.get('original_title') if c['media_type'] == 'movie' else c.get('original_name')
+        c_date = c.get('release_date') if c['media_type'] == 'movie' else c.get('first_air_date')
         
-    res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
-    results = res.json().get('results', [])
-    for r in results:
-        if r.get('title', '').lower() == str(title).lower():
-            return 'movie', r['id'], r.get('poster_path')
-            
+        c_year = 0
+        if c_date and len(c_date) >= 4:
+            try: c_year = int(c_date[:4])
+            except ValueError: pass
+                
+        is_exact_title = (clean_string(c_title) == target_clean or clean_string(c_orig_title) == target_clean)
+        year_delta = abs(c_year - target_year) if (target_year > 0 and c_year > 0) else 999
+        
+        title_weight = 10000 if is_exact_title else 0
+        year_weight = 2000 if year_delta == 0 else (1000 if year_delta == 1 else (500 if year_delta == 2 else (1000 if year_delta == 999 else 0)))
+        popularity_weight = c.get('popularity', 0) + (c.get('vote_count', 0) * 0.1)
+        score = title_weight + year_weight + popularity_weight
+        
+        if score > best_score:
+            best_score = score
+            best_candidate = c
+
+    if best_candidate:
+        return best_candidate['media_type'], best_candidate['id'], best_candidate.get('poster_path')
     return None, None, None
 
 def fetch_poster_and_director(title, year):
-    cache_key = f"poster_{title}_{year}"
+    cache_key = f"poster_v8_{title}_{year}"
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data['poster_url'], cached_data['director']
         
@@ -116,7 +148,6 @@ def fetch_poster_and_director(title, year):
         if media_type:
             poster_url = f"https://image.tmdb.org/t/p/w200{poster_path}" if poster_path else None
             detail_url = f"https://api.themoviedb.org/3/{media_type}/{media_id}?append_to_response=credits"
-            
             det_response = requests.get(detail_url, headers=HEADERS)
             director = "Unknown"
             
@@ -136,7 +167,7 @@ def fetch_poster_and_director(title, year):
     return None, "Unknown"
 
 def fetch_movie_details(title, year):
-    cache_key = f"details_v2_{title}_{year}"
+    cache_key = f"details_v8_{title}_{year}" # v8 cache bump
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data
         
@@ -164,35 +195,34 @@ def fetch_movie_details(title, year):
                 if not directors and data.get('created_by'): directors = [c['name'] for c in data.get('created_by', [])]
             
             poster_path = data.get('poster_path') or main_poster_path
-            poster_url = f"https://image.tmdb.org/t/p/w92{poster_path}" if poster_path else None
+            poster_url = f"https://image.tmdb.org/t/p/w200{poster_path}" if poster_path else None
             
             orig_lang_code = data.get('original_language')
             orig_lang_name = None
-            
             for l in data.get('spoken_languages', []):
                 if l.get('iso_639_1') == orig_lang_code:
                     orig_lang_name = l.get('english_name') or l.get('name')
                     break
             
             if not orig_lang_name and orig_lang_code:
-                fallback_map = {
-                    'en': 'English', 'fr': 'French', 'ja': 'Japanese', 'ko': 'Korean', 
-                    'es': 'Spanish', 'it': 'Italian', 'de': 'German', 'zh': 'Mandarin', 
-                    'cn': 'Cantonese', 'ru': 'Russian', 'pt': 'Portuguese', 'hi': 'Hindi',
-                    'sv': 'Swedish', 'da': 'Danish', 'nl': 'Dutch', 'pl': 'Polish', 
-                    'tr': 'Turkish', 'fa': 'Persian', 'no': 'Norwegian', 'fi': 'Finnish', 
-                    'th': 'Thai', 'id': 'Indonesian', 'vi': 'Vietnamese', 'el': 'Greek', 
-                    'cs': 'Czech', 'hu': 'Hungarian', 'he': 'Hebrew', 'tl': 'Tagalog'
-                }
+                fallback_map = { 'en': 'English', 'fr': 'French', 'ja': 'Japanese', 'ko': 'Korean', 'es': 'Spanish', 'it': 'Italian', 'de': 'German', 'zh': 'Mandarin', 'cn': 'Cantonese', 'ru': 'Russian', 'pt': 'Portuguese', 'hi': 'Hindi', 'sv': 'Swedish', 'da': 'Danish', 'nl': 'Dutch', 'pl': 'Polish', 'tr': 'Turkish', 'fa': 'Persian', 'no': 'Norwegian', 'fi': 'Finnish', 'th': 'Thai', 'id': 'Indonesian', 'vi': 'Vietnamese', 'el': 'Greek', 'cs': 'Czech', 'hu': 'Hungarian', 'he': 'Hebrew', 'tl': 'Tagalog' }
                 orig_lang_name = fallback_map.get(orig_lang_code, orig_lang_code.upper())
             
+            genres = [g['name'] for g in data.get('genres', [])]
+
             result = {
                 "runtime": runtime, 
                 "countries": [c['name'] for c in data.get('production_countries', [])], 
                 "languages": [orig_lang_name] if orig_lang_name else [], 
+                "genres": genres,
                 "directors": list(set(directors)), 
                 "actors": [m['name'] for m in data.get('credits', {}).get('cast', [])],
-                "poster_url": poster_url
+                "poster_url": poster_url,
+                "popularity": data.get('popularity', 0.0),
+                "vote_average": data.get('vote_average', 0.0),
+                "vote_count": data.get('vote_count', 0),
+                "media_type": media_type,
+                "release_date": data.get('release_date') if media_type == 'movie' else data.get('first_air_date')
             }
             set_cache(cache_key, result)
             return result
@@ -213,11 +243,9 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         extracted_username = "User"
         favorites_df = pd.DataFrame()
         
-        # --- NEW: Extract Username automatically from profile.csv ---
         if 'profile.csv' in file_list:
             with z.open('profile.csv') as f:
                 profile_df = pd.read_csv(f)
-                
                 if 'Username' in profile_df.columns and not pd.isna(profile_df.iloc[0]['Username']):
                     extracted_username = str(profile_df.iloc[0]['Username'])
                     
@@ -296,8 +324,7 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         movies_to_process['safe_year'] = pd.to_numeric(movies_to_process['Year'], errors='coerce').fillna(0).astype(int)
         
         total_to_process = len(movies_to_process)
-        
-        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_v2_{row.Name}_{row.safe_year}")]
+        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_v8_{row.Name}_{row.safe_year}")]
                 
         if movies_missing_from_cache:
             pool = Pool(40)
@@ -316,6 +343,10 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         year_films = {} 
         country_films = {} 
         language_films = {} 
+        milestone_pool = []
+        
+        genre_counts = {}
+        rating_dist = {0.5: 0, 1.0: 0, 1.5: 0, 2.0: 0, 2.5: 0, 3.0: 0, 3.5: 0, 4.0: 0, 4.5: 0, 5.0: 0}
         
         for idx, row in enumerate(movies_to_process.itertuples(index=False)):
             details = fetch_movie_details(row.Name, row.safe_year)
@@ -323,19 +354,41 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 total_minutes += details['runtime'] * row.play_count
                 unique_countries.update(details['countries'])
                 
+                # We add 'vote_average' to movie_obj so JS can sort posters by highest TMDB rating
                 movie_obj = {
                     "title": row.Name,
-                    "rating": row.Rating if pd.notna(row.Rating) else 0,
+                    "rating": row.Rating if pd.notna(row.Rating) else 0.0,
                     "play_count": row.play_count,
-                    "poster_url": details.get('poster_url')
+                    "poster_url": details.get('poster_url'),
+                    "year": row.safe_year,
+                    "vote_average": details.get('vote_average', 0.0)
                 }
+                
+                milestone_pool.append({
+                    "title": row.Name,
+                    "year": row.safe_year,
+                    "runtime": details.get('runtime', 0),
+                    "popularity": details.get('popularity', 0.0),
+                    "vote_average": details.get('vote_average', 0.0),
+                    "vote_count": details.get('vote_count', 0),
+                    "media_type": details.get('media_type', 'movie'),
+                    "release_date": details.get('release_date', ''),
+                    "user_rating": row.Rating if pd.notna(row.Rating) else 0.0,
+                    "poster_url": details.get('poster_url')
+                })
+                
+                for g in details.get('genres', []):
+                    genre_counts[g] = genre_counts.get(g, 0) + 1
+                    
+                if pd.notna(row.Rating) and row.Rating > 0:
+                    val = round(float(row.Rating) * 2) / 2
+                    if val in rating_dist:
+                        rating_dist[val] += 1
                 
                 for country in details['countries']:
                     country_films.setdefault(country, []).append(movie_obj)
-                
                 for lang in details.get('languages', []):
                     language_films.setdefault(lang, []).append(movie_obj)
-                
                 for d in details['directors']: director_films.setdefault(d, []).append(movie_obj)
                 for a in details['actors']: actor_films.setdefault(a, []).append(movie_obj)
                 
@@ -343,64 +396,152 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 
             if not movies_missing_from_cache and progress_callback: progress_callback(idx + 1, total_to_process)
             
-        top_directors = []
-        for name, films in director_films.items():
-            top_directors.append({"name": name, "count": sum(f['play_count'] for f in films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)})
-        top_directors = sorted(top_directors, key=lambda x: x['count'], reverse=True)[:10]
+        newest_film = None; oldest_film = None; most_obscure = None; most_popular = None
+        highest_rating = None; lowest_rating = None; longest_film = None
+        recent_watch = None; most_rewatched = None
+        
+        if 'diary.csv' in file_list:
+            with z.open('diary.csv') as f:
+                diary_df = pd.read_csv(f)
+                if not diary_df.empty:
+                    diary_df['ParsedDate'] = pd.to_datetime(diary_df['Watched Date'], errors='coerce')
+                    diary_df = diary_df.sort_values(by='ParsedDate', ascending=False)
+                    first_row = diary_df.iloc[0]
+                    recent_watch = {"title": first_row['Name'], "year": int(first_row['Year']), "text": f"{first_row['Name']} ({int(first_row['Year'])})"}
+                    
+                    play_counts = diary_df.groupby(['Name', 'Year']).size().reset_index(name='p_count')
+                    if not play_counts.empty:
+                        top_rw = play_counts.sort_values(by='p_count', ascending=False).iloc[0]
+                        if top_rw['p_count'] > 1:
+                            most_rewatched = {"title": top_rw['Name'], "year": int(top_rw['Year']), "text": f"{top_rw['Name']} ({top_rw['p_count']}x)"}
 
-        top_actors = []
+        if not most_rewatched and not movies_to_process.empty:
+            rewatched_only = movies_to_process[movies_to_process['play_count'] > 1]
+            if not rewatched_only.empty:
+                top_rw = rewatched_only.sort_values(by='play_count', ascending=False).iloc[0]
+                most_rewatched = {"title": top_rw['Name'], "year": top_rw['safe_year'], "text": f"{top_rw['Name']} ({top_rw['play_count']}x)"}
+
+        if milestone_pool:
+            valid_dates = [m for m in milestone_pool if m['release_date'] and re.match(r'^\d{4}-\d{2}-\d{2}$', str(m['release_date']))]
+            if valid_dates:
+                nw = max(valid_dates, key=lambda x: x['release_date'])
+                od = min(valid_dates, key=lambda x: x['release_date'])
+                newest_film = {"title": nw['title'], "year": nw['year'], "text": f"{nw['title']} ({nw['year']})"}
+                oldest_film = {"title": od['title'], "year": od['year'], "text": f"{od['title']} ({od['year']})"}
+            
+            vetted_pop = [m for m in milestone_pool if m['vote_count'] >= 10]
+            if vetted_pop:
+                hi_pop = max(vetted_pop, key=lambda x: x['popularity'])
+                lo_pop = min(vetted_pop, key=lambda x: x['popularity'])
+                most_popular = {"title": hi_pop['title'], "year": hi_pop['year'], "text": f"{hi_pop['title']} ({hi_pop['year']})"}
+                most_obscure = {"title": lo_pop['title'], "year": lo_pop['year'], "text": f"{lo_pop['title']} ({lo_pop['year']})"}
+                
+            vetted_scores = [m for m in milestone_pool if m['user_rating'] > 0]
+            if vetted_scores:
+                hi_score = max(vetted_scores, key=lambda x: x['user_rating'])
+                lo_score = min(vetted_scores, key=lambda x: x['user_rating'])
+                highest_rating = {"title": hi_score['title'], "year": hi_score['year'], "text": f"{hi_score['title']} ({hi_score['user_rating']}★)"}
+                lowest_rating = {"title": lo_score['title'], "year": lo_score['year'], "text": f"{lo_score['title']} ({lo_score['user_rating']}★)"}
+                
+            feature_films = [m for m in milestone_pool if m['media_type'] == 'movie' and m['runtime'] > 0]
+            if feature_films:
+                long_f = max(feature_films, key=lambda x: x['runtime'])
+                longest_film = {"title": long_f['title'], "year": long_f['year'], "text": f"{long_f['title']} ({long_f['runtime']} min)"}
+
+        def process_milestone(m):
+            if not m: return {"text": "N/A", "poster_url": "https://via.placeholder.com/150x225/2c3440/89a?text=?"}
+            poster, _ = fetch_poster_and_director(m['title'], m['year'])
+            return {"text": m['text'], "poster_url": poster if poster else "https://via.placeholder.com/150x225/2c3440/89a?text=?"}
+
+        milestones_dict = {
+            "recent_watch": process_milestone(recent_watch), "newest_film": process_milestone(newest_film),
+            "oldest_film": process_milestone(oldest_film), "most_rewatched": process_milestone(most_rewatched),
+            "most_obscure": process_milestone(most_obscure), "most_popular": process_milestone(most_popular),
+            "highest_rating": process_milestone(highest_rating), "lowest_rating": process_milestone(lowest_rating),
+            "longest_film": process_milestone(longest_film)
+        }
+        
+        differences = []
+        for m in milestone_pool:
+            if m['user_rating'] > 0 and m['vote_count'] >= 50 and m['vote_average'] > 0:
+                tmdb_5 = m['vote_average'] / 2.0
+                diff = m['user_rating'] - tmdb_5
+                differences.append({
+                    "title": m['title'], "year": m['year'], "user_rating": m['user_rating'],
+                    "tmdb_rating": round(tmdb_5, 1), "diff": diff, "poster_url": m['poster_url']
+                })
+        
+        pos_diffs = sorted(differences, key=lambda x: x['diff'], reverse=True)[:10]
+        neg_diffs = sorted(differences, key=lambda x: x['diff'])[:10]
+
+        all_directors = []
+        for name, films in director_films.items():
+            all_directors.append({
+                "name": name, "total_count": sum(f['play_count'] for f in films), 
+                "unique_count": len(films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)
+            })
+        top_directors_total = sorted(all_directors, key=lambda x: x['total_count'], reverse=True)[:10]
+        top_directors_unique = sorted(all_directors, key=lambda x: x['unique_count'], reverse=True)[:10]
+
+        all_actors = []
         for name, films in actor_films.items():
-            top_actors.append({"name": name, "count": sum(f['play_count'] for f in films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)})
-        top_actors = sorted(top_actors, key=lambda x: x['count'], reverse=True)[:10]
+            all_actors.append({
+                "name": name, "total_count": sum(f['play_count'] for f in films), 
+                "unique_count": len(films), "films": sorted(films, key=lambda x: x['play_count'], reverse=True)
+            })
+        top_actors_total = sorted(all_actors, key=lambda x: x['total_count'], reverse=True)[:10]
+        top_actors_unique = sorted(all_actors, key=lambda x: x['unique_count'], reverse=True)[:10]
 
         MIN_RATED_FILMS = 3
-        
         top_rated_directors = []
-        for name, films in director_films.items():
-            rated = [f for f in films if f['rating'] > 0]
+        for d in all_directors:
+            rated = [f for f in d['films'] if f['rating'] > 0]
             if len(rated) >= MIN_RATED_FILMS:
-                top_rated_directors.append({"name": name, "avg_rating": sum(f['rating'] for f in rated) / len(rated), "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)})
+                top_rated_directors.append({
+                    "name": d['name'], "avg_rating": sum(f['rating'] for f in rated) / len(rated), 
+                    "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)
+                })
         top_rated_directors = sorted(top_rated_directors, key=lambda x: (x['avg_rating'], x['count']), reverse=True)[:10]
 
         top_rated_actors = []
-        for name, films in actor_films.items():
-            rated = [f for f in films if f['rating'] > 0]
+        for a in all_actors:
+            rated = [f for f in a['films'] if f['rating'] > 0]
             if len(rated) >= MIN_RATED_FILMS:
-                top_rated_actors.append({"name": name, "avg_rating": sum(f['rating'] for f in rated) / len(rated), "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)})
+                top_rated_actors.append({
+                    "name": a['name'], "avg_rating": sum(f['rating'] for f in rated) / len(rated), 
+                    "count": len(rated), "films": sorted(rated, key=lambda x: x['rating'], reverse=True)
+                })
         top_rated_actors = sorted(top_rated_actors, key=lambda x: (x['avg_rating'], x['count']), reverse=True)[:10]
 
-        for group in [top_directors, top_actors, top_rated_directors, top_rated_actors]:
+        for group in [top_directors_total, top_directors_unique, top_actors_total, top_actors_unique, top_rated_directors, top_rated_actors]:
             for p in group:
-                details = fetch_person_details(p['name'])
-                p['image_url'] = details['image_url']
-                p['biography'] = details['biography']
-                
-                p['remaining'] = max(0, len(p['films']) - 10)
-                p['top_films'] = p['films'][:10] 
-                del p['films'] 
-                if 'avg_rating' in p: p['avg_rating'] = round(p['avg_rating'], 2)
+                if 'biography' not in p:
+                    details = fetch_person_details(p['name'])
+                    p['image_url'] = details['image_url']
+                    p['biography'] = details['biography']
+                    p['remaining'] = max(0, len(p['films']) - 10)
+                    p['top_films'] = p['films'][:10]
+                if 'avg_rating' in p and isinstance(p['avg_rating'], float):
+                    p['avg_rating'] = round(p['avg_rating'], 2)
+
+        for group in [top_directors_total, top_directors_unique, top_actors_total, top_actors_unique, top_rated_directors, top_rated_actors]:
+            for p in group:
+                if 'films' in p: del p['films']
 
         valid_years_df = movies_to_process[movies_to_process['safe_year'] > 0].copy()
-        
         if not valid_years_df.empty:
             min_year = int(valid_years_df['safe_year'].min())
             max_year = int(valid_years_df['safe_year'].max())
-            
             all_years_df = pd.DataFrame({'year': range(min_year, max_year + 1)})
-
             year_counts = valid_years_df.groupby('safe_year')['play_count'].sum().reset_index()
             year_counts.columns = ['year', 'count']
-
             rated_films_df = valid_years_df[valid_years_df['Rating'] > 0]
             year_ratings = rated_films_df.groupby('safe_year')['Rating'].mean().reset_index()
             year_ratings.columns = ['year', 'avg_rating']
-
             yearly_stats_df = pd.merge(all_years_df, year_counts, on='year', how='left')
             yearly_stats_df = pd.merge(yearly_stats_df, year_ratings, on='year', how='left')
-            
             yearly_stats_df['count'] = yearly_stats_df['count'].fillna(0).astype(int)
             yearly_stats_df['avg_rating'] = yearly_stats_df['avg_rating'].fillna(0).round(2)
-            
             yearly_stats_list = yearly_stats_df.to_dict('records')
             
             for y_stat in yearly_stats_list:
@@ -408,29 +549,20 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         else:
             yearly_stats_list = []
         
-    # Launch background fetch using extracted username
     avatar_url = fetch_user_profile(extracted_username)
             
     return {
-        "username": extracted_username,
-        "avatar_url": avatar_url,
+        "username": extracted_username, "avatar_url": avatar_url,
         "total_watched": total_watched, "top_20": top_20_list, "total_hours": round(total_minutes / 60, 1),
         "total_countries": len(unique_countries), "total_directors": len(director_films), 
-        "top_directors_list": top_directors, "top_actors_list": top_actors,
+        "top_directors_total": top_directors_total, "top_directors_unique": top_directors_unique,
+        "top_actors_total": top_actors_total, "top_actors_unique": top_actors_unique,
         "top_rated_directors_list": top_rated_directors, "top_rated_actors_list": top_rated_actors,
         "yearly_stats": yearly_stats_list,
-        "country_stats": [
-            {
-                "Country": k, 
-                "Count": sum(f['play_count'] for f in v), 
-                "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)
-            } for k, v in country_films.items()
-        ],
-        "language_stats": sorted([
-            {
-                "Language": k,
-                "Count": sum(f['play_count'] for f in v),
-                "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)
-            } for k, v in language_films.items()
-        ], key=lambda x: x['Count'], reverse=True)
+        "genre_stats": sorted([{"Genre": k, "Count": v} for k, v in genre_counts.items()], key=lambda x: x['Count'], reverse=True)[:15],
+        "rating_dist": [{"rating": k, "count": v} for k, v in rating_dist.items()],
+        "country_stats": [{"Country": k, "Count": len(v), "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)} for k, v in country_films.items()],
+        "language_stats": sorted([{"Language": k, "Count": len(v), "films": sorted(v, key=lambda x: (x['rating'], x['play_count']), reverse=True)} for k, v in language_films.items()], key=lambda x: x['Count'], reverse=True),
+        "milestones": milestones_dict,
+        "differences": { "positive": pos_diffs, "negative": neg_diffs }
     }
