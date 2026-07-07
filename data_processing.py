@@ -6,7 +6,10 @@ import os
 import json
 import sqlite3
 import re
+import difflib
 from dotenv import load_dotenv
+import gevent
+from gevent.pool import Pool
 
 load_dotenv()
 TMDB_TOKEN = os.getenv("TMDB_TOKEN")
@@ -16,26 +19,28 @@ HEADERS = {
     "authorization": f"Bearer {TMDB_TOKEN}"
 }
 
-# --- SQLITE CACHING SYSTEM ---
+# --- SQLITE CACHING SYSTEM (OPTIMIZED) ---
 DB_FILE = "tmdb_cache.db"
 
+# Persistent global connection to prevent I/O thrashing
+db_conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+
 def init_db():
-    with sqlite3.connect(DB_FILE) as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, data TEXT)")
+    db_conn.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, data TEXT)")
+    db_conn.commit()
 
 init_db()
 
 def get_cache(key):
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.execute("SELECT data FROM cache WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        if row:
-            return json.loads(row[0])
+    cursor = db_conn.execute("SELECT data FROM cache WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    if row:
+        return json.loads(row[0])
     return None
 
 def set_cache(key, data):
-    with sqlite3.connect(DB_FILE) as conn:
-        conn.execute("INSERT OR REPLACE INTO cache (key, data) VALUES (?, ?)", (key, json.dumps(data)))
+    db_conn.execute("INSERT OR REPLACE INTO cache (key, data) VALUES (?, ?)", (key, json.dumps(data)))
+    db_conn.commit()
 
 def fetch_user_profile(username):
     if not username or username.lower() == "user":
@@ -80,6 +85,7 @@ def fetch_person_details(name):
         pass
     return {"image_url": None, "biography": ""}
 
+# --- UPGRADED FUZZY MATCHING ENGINE ---
 def get_tmdb_match(title, year):
     title_str = str(title)
     title_encoded = requests.utils.quote(title_str)
@@ -88,15 +94,26 @@ def get_tmdb_match(title, year):
         return re.sub(r'[^a-z0-9]', '', str(s).lower()) if s else ""
     
     target_clean = clean_string(title_str)
-    target_year = int(year) if year else 0
+    target_year = int(year) if year and pd.notna(year) else 0
     candidates = []
     
     try:
-        movie_res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
+        # 1. Ask TMDB to natively filter by year first
+        year_query = f"&primary_release_year={target_year}" if target_year > 0 else ""
+        movie_res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}{year_query}", headers=HEADERS)
+        
         if movie_res.status_code == 200:
             for r in movie_res.json().get('results', []):
                 r['media_type'] = 'movie'
                 candidates.append(r)
+        
+        # 2. If nothing is found (or year is wrong), try the search without the strict year filter
+        if not candidates and target_year > 0:
+            movie_res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
+            if movie_res.status_code == 200:
+                for r in movie_res.json().get('results', []):
+                    r['media_type'] = 'movie'
+                    candidates.append(r)
     except Exception:
         pass
         
@@ -122,13 +139,33 @@ def get_tmdb_match(title, year):
             try: c_year = int(c_date[:4])
             except ValueError: pass
                 
-        is_exact_title = (clean_string(c_title) == target_clean or clean_string(c_orig_title) == target_clean)
-        year_delta = abs(c_year - target_year) if (target_year > 0 and c_year > 0) else 999
+        c_title_clean = clean_string(c_title)
+        c_orig_clean = clean_string(c_orig_title)
         
-        title_weight = 10000 if is_exact_title else 0
-        year_weight = 2000 if year_delta == 0 else (1000 if year_delta == 1 else (500 if year_delta == 2 else (1000 if year_delta == 999 else 0)))
-        popularity_weight = c.get('popularity', 0) + (c.get('vote_count', 0) * 0.1)
-        score = title_weight + year_weight + popularity_weight
+        # Fuzzy matching logic
+        sim_title = difflib.SequenceMatcher(None, target_clean, c_title_clean).ratio()
+        sim_orig = difflib.SequenceMatcher(None, target_clean, c_orig_clean).ratio()
+        best_sim = max(sim_title, sim_orig)
+        
+        # Substring Bonus for long TMDB titles (e.g. sequels with subtitles)
+        if target_clean in c_title_clean or target_clean in c_orig_clean:
+            best_sim = max(best_sim, 0.95)
+            
+        title_weight = best_sim * 10000
+        
+        # Year penalty/bonus
+        year_delta = abs(c_year - target_year) if (target_year > 0 and c_year > 0) else 999
+        if year_delta == 0: year_weight = 3000
+        elif year_delta == 1: year_weight = 1000
+        elif year_delta == 2: year_weight = 0
+        elif year_delta == 999: year_weight = 0
+        else: year_weight = -2000 
+        
+        # Popularity tie-breaker
+        popularity_weight = c.get('popularity', 0) * 5
+        vote_weight = min(c.get('vote_count', 0), 3000) 
+        
+        score = title_weight + year_weight + popularity_weight + vote_weight
         
         if score > best_score:
             best_score = score
@@ -139,7 +176,7 @@ def get_tmdb_match(title, year):
     return None, None, None
 
 def fetch_poster_and_director(title, year):
-    cache_key = f"poster_v8_{title}_{year}"
+    cache_key = f"poster_v10_{title}_{year}" # v10 cache bump
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data['poster_url'], cached_data['director']
         
@@ -167,7 +204,7 @@ def fetch_poster_and_director(title, year):
     return None, "Unknown"
 
 def fetch_movie_details(title, year):
-    cache_key = f"details_v8_{title}_{year}" # v8 cache bump
+    cache_key = f"details_v10_{title}_{year}" # v10 cache bump
     cached_data = get_cache(cache_key)
     if cached_data: return cached_data
         
@@ -230,9 +267,6 @@ def fetch_movie_details(title, year):
     return None
 
 def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None):
-    import gevent
-    from gevent.pool import Pool
-    
     with zipfile.ZipFile(zip_path, 'r') as z:
         file_list = z.namelist()
         with z.open('watched.csv') as f: watched_df = pd.read_csv(f)
@@ -319,12 +353,13 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         else:
             movies_to_process['play_count'] = 1
             
+        # Ensure type casting is done at the Pandas level
         movies_to_process = pd.merge(movies_to_process, ratings_df[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
         movies_to_process['Rating'] = pd.to_numeric(movies_to_process['Rating'], errors='coerce')
         movies_to_process['safe_year'] = pd.to_numeric(movies_to_process['Year'], errors='coerce').fillna(0).astype(int)
         
         total_to_process = len(movies_to_process)
-        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_v8_{row.Name}_{row.safe_year}")]
+        movies_missing_from_cache = [row for row in movies_to_process.itertuples(index=False) if not get_cache(f"details_v10_{row.Name}_{row.safe_year}")]
                 
         if movies_missing_from_cache:
             pool = Pool(40)
@@ -354,7 +389,6 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 total_minutes += details['runtime'] * row.play_count
                 unique_countries.update(details['countries'])
                 
-                # We add 'vote_average' to movie_obj so JS can sort posters by highest TMDB rating
                 movie_obj = {
                     "title": row.Name,
                     "rating": row.Rating if pd.notna(row.Rating) else 0.0,
@@ -513,18 +547,37 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 })
         top_rated_actors = sorted(top_rated_actors, key=lambda x: (x['avg_rating'], x['count']), reverse=True)[:10]
 
-        for group in [top_directors_total, top_directors_unique, top_actors_total, top_actors_unique, top_rated_directors, top_rated_actors]:
+        # Parallelize Cast & Crew Biography Fetches
+        all_cast_groups = [top_directors_total, top_directors_unique, top_actors_total, top_actors_unique, top_rated_directors, top_rated_actors]
+        missing_bios = set()
+        
+        for group in all_cast_groups:
             for p in group:
                 if 'biography' not in p:
-                    details = fetch_person_details(p['name'])
+                    missing_bios.add(p['name'])
+                    
+        if missing_bios:
+            bio_pool = Pool(20)
+            def fetch_bio_worker(name): return name, fetch_person_details(name)
+            bio_results = [bio_pool.spawn(fetch_bio_worker, name) for name in missing_bios]
+            gevent.joinall(bio_results)
+            bio_dict = {res.value[0]: res.value[1] for res in bio_results if res.value}
+        else:
+            bio_dict = {}
+
+        # Map the fetched data back to the person objects
+        for group in all_cast_groups:
+            for p in group:
+                if 'biography' not in p:
+                    details = bio_dict.get(p['name'], {"image_url": None, "biography": ""})
                     p['image_url'] = details['image_url']
                     p['biography'] = details['biography']
-                    p['remaining'] = max(0, len(p['films']) - 10)
-                    p['top_films'] = p['films'][:10]
+                    p['remaining'] = max(0, len(p.get('films', [])) - 10)
+                    p['top_films'] = p.get('films', [])[:10]
                 if 'avg_rating' in p and isinstance(p['avg_rating'], float):
                     p['avg_rating'] = round(p['avg_rating'], 2)
 
-        for group in [top_directors_total, top_directors_unique, top_actors_total, top_actors_unique, top_rated_directors, top_rated_actors]:
+        for group in all_cast_groups:
             for p in group:
                 if 'films' in p: del p['films']
 

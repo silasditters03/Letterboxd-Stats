@@ -121,18 +121,18 @@ function sortAndRenderGrid(sortType) {
     }
 
     const grid = document.getElementById(currentGridId);
-    grid.innerHTML = "";
+    let htmlContent = ""; // PERFORMANCE FIX 3: Prevent DOM Thrashing
+    
     sorted.forEach(film => {
-        const card = document.createElement('div');
-        card.className = `poster-card small`;
         let overlayText = `${film.title}<br>${film.rating > 0 ? film.rating + '★' : ''}`;
         if (film.poster_url) {
-            card.innerHTML = `<img src="${film.poster_url}" class="poster-img" alt="${film.title}"><div class="poster-overlay">${overlayText}</div>`;
+            // PERFORMANCE FIX 4: Added loading="lazy"
+            htmlContent += `<div class="poster-card small"><img src="${film.poster_url}" class="poster-img" alt="${film.title}" loading="lazy"><div class="poster-overlay">${overlayText}</div></div>`;
         } else {
-            card.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.title}</div><div class="poster-overlay">${overlayText}</div>`;
+            htmlContent += `<div class="poster-card small"><div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.title}</div><div class="poster-overlay">${overlayText}</div></div>`;
         }
-        grid.appendChild(card);
     });
+    grid.innerHTML = htmlContent;
 }
 
 document.querySelectorAll('.sort-dropdown').forEach(dropdown => {
@@ -150,7 +150,8 @@ function generateTooltipHTML(person) {
     let postersHTML = topFilms.map(film => {
         let titleTag = `${film.title}${film.rating > 0 ? ` (${film.rating}★)` : ''}`;
         if (film.poster_url) {
-            return `<img src="${film.poster_url}" class="tooltip-poster" alt="${film.title}" title="${titleTag}">`;
+            // PERFORMANCE FIX 4: Added loading="lazy"
+            return `<img src="${film.poster_url}" class="tooltip-poster" alt="${film.title}" title="${titleTag}" loading="lazy">`;
         } else {
             return `<div class="tooltip-poster-fallback" title="${titleTag}">?</div>`;
         }
@@ -205,7 +206,8 @@ const customChartTooltipHandler = (context) => {
             let postersHTML = topFilms.map(film => {
                 let titleTag = `${film.title}${film.rating > 0 ? ` (${film.rating}★)` : ''}`;
                 if (film.poster_url) {
-                    return `<img src="${film.poster_url}" class="tooltip-poster" alt="${film.title}" title="${titleTag}">`;
+                    // PERFORMANCE FIX 4: Added loading="lazy"
+                    return `<img src="${film.poster_url}" class="tooltip-poster" alt="${film.title}" title="${titleTag}" loading="lazy">`;
                 } else {
                     return `<div class="tooltip-poster-fallback" title="${titleTag}">?</div>`;
                 }
@@ -298,17 +300,19 @@ function drawMap(countryData) {
 function renderCastList(containerId, data, icon, countKey) {
     const listEl = document.getElementById(containerId);
     if (!listEl) return;
-    listEl.innerHTML = "";
+    
+    let htmlContent = ""; // PERFORMANCE FIX 3: Prevent DOM Thrashing
     
     data.forEach((person, index) => {
         let personId = person.name.replace(/[^a-zA-Z0-9]/g, '-'); 
         window.personData[personId] = person;
+        // PERFORMANCE FIX 4: Added loading="lazy"
         let avatarHTML = person.image_url 
-            ? `<img src="${person.image_url}" class="leaderboard-avatar" alt="${person.name}">` 
+            ? `<img src="${person.image_url}" class="leaderboard-avatar" alt="${person.name}" loading="lazy">` 
             : `<div class="leaderboard-avatar-fallback">${icon}</div>`;
             
         let countLabel = `${person[countKey]} films`;
-        listEl.innerHTML += `
+        htmlContent += `
             <div class="leaderboard-item" onclick="showProfile('${personId}')">
                 <div class="leaderboard-left">
                     ${avatarHTML}
@@ -319,6 +323,8 @@ function renderCastList(containerId, data, icon, countKey) {
             </div>
         `;
     });
+    
+    listEl.innerHTML = htmlContent;
 }
 
 // --- CORE APP ---
@@ -344,23 +350,22 @@ function buildDashboard(stats) {
     document.getElementById('stat-directors').innerText = stats.total_directors;
 
     const grid = document.getElementById('poster-grid');
-    grid.innerHTML = ""; 
+    let gridHtml = ""; // PERFORMANCE FIX 3
     stats.top_20.forEach((film, index) => {
         const isTop4 = index < 4;
-        const card = document.createElement('div');
-        card.className = `poster-card ${isTop4 ? 'large' : 'small'}`;
         let overlayText = `${film.Name} (${Math.floor(film.Year)})<br>Dir: ${film.director || 'Unknown'}`;
         if (film.poster_url) {
-            card.innerHTML = `<img src="${film.poster_url}" class="poster-img" alt="${film.Name}"><div class="poster-overlay">${overlayText}</div>`;
+            // PERFORMANCE FIX 4
+            gridHtml += `<div class="poster-card ${isTop4 ? 'large' : 'small'}"><img src="${film.poster_url}" class="poster-img" alt="${film.Name}" loading="lazy"><div class="poster-overlay">${overlayText}</div></div>`;
         } else {
-            card.innerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.Name}</div><div class="poster-overlay">${overlayText}</div>`;
+            gridHtml += `<div class="poster-card ${isTop4 ? 'large' : 'small'}"><div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;">${film.Name}</div><div class="poster-overlay">${overlayText}</div></div>`;
         }
-        grid.appendChild(card);
     });
+    grid.innerHTML = gridHtml;
 
     if (stats.milestones) {
         const mGrid = document.getElementById('milestone-grid');
-        mGrid.innerHTML = "";
+        let mGridHtml = ""; // PERFORMANCE FIX 3
         
         const mConfig = [
             { title: "MOST RECENT WATCH", key: "recent_watch" },
@@ -376,35 +381,35 @@ function buildDashboard(stats) {
 
         mConfig.forEach(m => {
             let data = stats.milestones[m.key]; 
-            const card = document.createElement('div');
-            card.className = "stat-card";
-            card.style.cssText = "display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box;";
-            
             let posterSrc = data && data.poster_url ? data.poster_url : "https://via.placeholder.com/140x210/2c3440/89a?text=?";
             let textValue = data && data.text ? data.text : "N/A";
 
-            card.innerHTML = `
-                <span style="font-size: 11px; color: #89a; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; display: block; margin-bottom: 12px;">${m.title}</span>
-                <img src="${posterSrc}" style="width: 100px; height: 150px; object-fit: cover; border-radius: 6px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); margin-bottom: 12px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                <div style="font-weight: bold; font-size: 14px; color: white; line-height: 1.4; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
-                    ${textValue}
+            // PERFORMANCE FIX 4: Add loading="lazy" to milestone images
+            mGridHtml += `
+                <div class="stat-card" style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); box-sizing: border-box;">
+                    <span style="font-size: 11px; color: #89a; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; display: block; margin-bottom: 12px;">${m.title}</span>
+                    <img src="${posterSrc}" loading="lazy" style="width: 100px; height: 150px; object-fit: cover; border-radius: 6px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); margin-bottom: 12px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    <div style="font-weight: bold; font-size: 14px; color: white; line-height: 1.4; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
+                        ${textValue}
+                    </div>
                 </div>
             `;
-            mGrid.appendChild(card);
         });
+        mGrid.innerHTML = mGridHtml;
     }
 
     if (stats.differences) {
         const renderDiffs = (container, data, isPositive) => {
             if (!container) return;
-            container.innerHTML = "";
+            let diffHtml = ""; // PERFORMANCE FIX 3
             data.forEach((m, index) => {
-                let posterHTML = `<img src="${m.poster_url || 'https://via.placeholder.com/45x68/2c3440/89a?text=?'}" style="width: 45px; height: 68px; border-radius: 4px; object-fit: cover;">`;
+                // PERFORMANCE FIX 4
+                let posterHTML = `<img src="${m.poster_url || 'https://via.placeholder.com/45x68/2c3440/89a?text=?'}" loading="lazy" style="width: 45px; height: 68px; border-radius: 4px; object-fit: cover;">`;
                 let sign = isPositive ? "+" : "";
                 let diffLabel = `${sign}${m.diff.toFixed(1)} ★`;
                 let color = isPositive ? "#00E054" : "#ff8000";
                 
-                container.innerHTML += `
+                diffHtml += `
                     <div class="leaderboard-item" style="cursor: default;">
                         <div class="leaderboard-left">
                             ${posterHTML}
@@ -417,6 +422,7 @@ function buildDashboard(stats) {
                     </div>
                 `;
             });
+            container.innerHTML = diffHtml;
         };
         renderDiffs(document.getElementById('diff-positive-list'), stats.differences.positive, true);
         renderDiffs(document.getElementById('diff-negative-list'), stats.differences.negative, false);
@@ -438,13 +444,14 @@ function buildDashboard(stats) {
     ratedConfig.forEach(cfg => {
         const listEl = document.getElementById(cfg.id);
         if (!listEl) return;
-        listEl.innerHTML = "";
+        let ratedHtml = ""; // PERFORMANCE FIX 3
         cfg.data.forEach((person, index) => {
             let personId = person.name.replace(/[^a-zA-Z0-9]/g, '-'); 
             window.personData[personId] = person;
-            let avatarHTML = person.image_url ? `<img src="${person.image_url}" class="leaderboard-avatar" alt="${person.name}">` : `<div class="leaderboard-avatar-fallback">${cfg.icon}</div>`;
+            // PERFORMANCE FIX 4
+            let avatarHTML = person.image_url ? `<img src="${person.image_url}" class="leaderboard-avatar" alt="${person.name}" loading="lazy">` : `<div class="leaderboard-avatar-fallback">${cfg.icon}</div>`;
             let countLabel = `★ ${person.avg_rating} <span style="font-size: 0.8em; opacity: 0.7;">(${person.count})</span>`;
-            listEl.innerHTML += `
+            ratedHtml += `
                 <div class="leaderboard-item" onclick="showProfile('${personId}')">
                     <div class="leaderboard-left">
                         ${avatarHTML}
@@ -455,6 +462,7 @@ function buildDashboard(stats) {
                 </div>
             `;
         });
+        listEl.innerHTML = ratedHtml;
     });
 
     const langListEl = document.getElementById('languages-list');
@@ -462,8 +470,8 @@ function buildDashboard(stats) {
     const toggleLangBtn = document.getElementById('toggle-languages-btn');
 
     if (langListEl && extraLangEl && toggleLangBtn && stats.language_stats) {
-        langListEl.innerHTML = "";
-        extraLangEl.innerHTML = "";
+        let mainLangHtml = ""; // PERFORMANCE FIX 3
+        let extraLangHtml = "";
         
         if (stats.language_stats.length <= 10) {
             toggleLangBtn.style.display = "none";
@@ -474,7 +482,8 @@ function buildDashboard(stats) {
         stats.language_stats.forEach((lang, index) => {
             let code = languageToCountryCode[lang.Language];
             let safeLangName = lang.Language.replace(/'/g, "\\'");
-            let iconHTML = code ? `<img src="https://flagcdn.com/w40/${code}.png" style="width: 24px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.5);" alt="${lang.Language} flag">` : `<span style="font-size: 18px; color: #89a;">🌐</span>`;
+            // PERFORMANCE FIX 4
+            let iconHTML = code ? `<img src="https://flagcdn.com/w40/${code}.png" style="width: 24px; border-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.5);" alt="${lang.Language} flag" loading="lazy">` : `<span style="font-size: 18px; color: #89a;">🌐</span>`;
             
             let itemHTML = `
                 <div class="leaderboard-item" onclick="showLanguageProfile('${safeLangName}')">
@@ -485,9 +494,12 @@ function buildDashboard(stats) {
                     <span class="leaderboard-count">${lang.Count} films</span>
                 </div>
             `;
-            if (index < 10) { langListEl.innerHTML += itemHTML; } 
-            else { extraLangEl.innerHTML += itemHTML; }
+            if (index < 10) { mainLangHtml += itemHTML; } 
+            else { extraLangHtml += itemHTML; }
         });
+        
+        langListEl.innerHTML = mainLangHtml;
+        extraLangEl.innerHTML = extraLangHtml;
 
         toggleLangBtn.onclick = function() {
             if (extraLangEl.classList.contains('hidden')) {
@@ -555,7 +567,6 @@ function buildDashboard(stats) {
         const genreData = stats.genre_stats.map(g => g.Count);
         const colors = ['#00E054', '#40bcf4', '#ff8000', '#9b59b6', '#e74c3c', '#f1c40f', '#1abc9c', '#3498db', '#e67e22', '#2ecc71', '#89a', '#ffffff'];
 
-        // Notice borderWidth is 0 to remove lines
         genreChartInstance = new Chart(document.getElementById('genreChart').getContext('2d'), {
             type: 'doughnut',
             data: {
