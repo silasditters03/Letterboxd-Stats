@@ -91,11 +91,15 @@ def get_tmdb_match(title, year):
     title_encoded = requests.utils.quote(title_str)
     
     def clean_string(s):
-        return re.sub(r'[^a-z0-9]', '', str(s).lower()) if s else ""
+        # Keep spaces to respect word boundaries, strip punctuation
+        return re.sub(r'[^a-z0-9\s]', '', str(s).lower()).strip() if s else ""
     
     target_clean = clean_string(title_str)
+    target_no_spaces = target_clean.replace(" ", "")
     target_year = int(year) if year and pd.notna(year) else 0
+    
     candidates = []
+    seen_ids = set()
     
     try:
         # 1. Ask TMDB to natively filter by year first
@@ -106,14 +110,17 @@ def get_tmdb_match(title, year):
             for r in movie_res.json().get('results', []):
                 r['media_type'] = 'movie'
                 candidates.append(r)
+                seen_ids.add(r['id'])
         
-        # 2. If nothing is found (or year is wrong), try the search without the strict year filter
-        if not candidates and target_year > 0:
-            movie_res = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
-            if movie_res.status_code == 200:
-                for r in movie_res.json().get('results', []):
-                    r['media_type'] = 'movie'
-                    candidates.append(r)
+        # 2. ALWAYS perform a broad search to catch release year discrepancies (festival vs wide release)
+        if target_year > 0:
+            movie_res_broad = requests.get(f"https://api.themoviedb.org/3/search/movie?query={title_encoded}", headers=HEADERS)
+            if movie_res_broad.status_code == 200:
+                for r in movie_res_broad.json().get('results', []):
+                    if r['id'] not in seen_ids:
+                        r['media_type'] = 'movie'
+                        candidates.append(r)
+                        seen_ids.add(r['id'])
     except Exception:
         pass
         
@@ -142,28 +149,49 @@ def get_tmdb_match(title, year):
         c_title_clean = clean_string(c_title)
         c_orig_clean = clean_string(c_orig_title)
         
-        # Fuzzy matching logic
-        sim_title = difflib.SequenceMatcher(None, target_clean, c_title_clean).ratio()
-        sim_orig = difflib.SequenceMatcher(None, target_clean, c_orig_clean).ratio()
+        # Compare strings with spaces removed for base fuzzy matching
+        c_title_no_spaces = c_title_clean.replace(" ", "")
+        c_orig_no_spaces = c_orig_clean.replace(" ", "")
+        
+        sim_title = difflib.SequenceMatcher(None, target_no_spaces, c_title_no_spaces).ratio()
+        sim_orig = difflib.SequenceMatcher(None, target_no_spaces, c_orig_no_spaces).ratio()
         best_sim = max(sim_title, sim_orig)
         
-        # Substring Bonus for long TMDB titles (e.g. sequels with subtitles)
-        if target_clean in c_title_clean or target_clean in c_orig_clean:
-            best_sim = max(best_sim, 0.95)
+        # Strict Exact Match Check
+        if target_clean == c_title_clean or target_clean == c_orig_clean:
+            best_sim = 1.0
+            is_exact = True
+        else:
+            is_exact = False
             
+        # Safe Subtitle/Sequel Prefix Bonus (e.g., Target: "Wake Up Dead Man", TMDB: "Wake Up Dead Man: A Knives Out Mystery")
+        if c_title_clean.startswith(target_clean + " ") or c_orig_clean.startswith(target_clean + " "):
+            best_sim = max(best_sim, 0.95)
+            is_prefix = True
+        else:
+            is_prefix = False
+
+        # --- THE BALANCED SCORING SYSTEM ---
         title_weight = best_sim * 10000
         
-        # Year penalty/bonus
+        # Give exact matches a solid boost, and prefix matches a minor boost.
+        if is_exact:
+            title_weight += 2000
+        elif is_prefix:
+            title_weight += 1000
+        
+        # Year penalty/bonus (Forgive a 1-year gap much more than before)
         year_delta = abs(c_year - target_year) if (target_year > 0 and c_year > 0) else 999
         if year_delta == 0: year_weight = 3000
-        elif year_delta == 1: year_weight = 1000
-        elif year_delta == 2: year_weight = 0
+        elif year_delta == 1: year_weight = 2000 
+        elif year_delta == 2: year_weight = 500
         elif year_delta == 999: year_weight = 0
         else: year_weight = -2000 
         
-        # Popularity tie-breaker
-        popularity_weight = c.get('popularity', 0) * 5
-        vote_weight = min(c.get('vote_count', 0), 3000) 
+        # Allow vote counts to bridge the gap between a Prefix match and an Exact match.
+        # This allows a highly anticipated/voted Franchise film to beat a 0-vote obscure film with the same base name.
+        popularity_weight = min(c.get('popularity', 0) * 5, 1000)
+        vote_weight = min(c.get('vote_count', 0) * 10, 3000) 
         
         score = title_weight + year_weight + popularity_weight + vote_weight
         
@@ -463,19 +491,27 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
                 newest_film = {"title": nw['title'], "year": nw['year'], "text": f"{nw['title']} ({nw['year']})"}
                 oldest_film = {"title": od['title'], "year": od['year'], "text": f"{od['title']} ({od['year']})"}
             
-            vetted_pop = [m for m in milestone_pool if m['vote_count'] >= 10]
-            if vetted_pop:
-                hi_pop = max(vetted_pop, key=lambda x: x['popularity'])
-                lo_pop = min(vetted_pop, key=lambda x: x['popularity'])
+            # --- 1. MOST POPULAR & MOST OBSCURE (Based on Total TMDB Vote Counts) ---
+            if milestone_pool:
+                hi_pop = max(milestone_pool, key=lambda x: x['vote_count'])
+                lo_pop = min(milestone_pool, key=lambda x: x['vote_count'])
                 most_popular = {"title": hi_pop['title'], "year": hi_pop['year'], "text": f"{hi_pop['title']} ({hi_pop['year']})"}
                 most_obscure = {"title": lo_pop['title'], "year": lo_pop['year'], "text": f"{lo_pop['title']} ({lo_pop['year']})"}
                 
-            vetted_scores = [m for m in milestone_pool if m['user_rating'] > 0]
-            if vetted_scores:
-                hi_score = max(vetted_scores, key=lambda x: x['user_rating'])
-                lo_score = min(vetted_scores, key=lambda x: x['user_rating'])
-                highest_rating = {"title": hi_score['title'], "year": hi_score['year'], "text": f"{hi_score['title']} ({hi_score['user_rating']}★)"}
-                lowest_rating = {"title": lo_score['title'], "year": lo_score['year'], "text": f"{lo_score['title']} ({lo_score['user_rating']}★)"}
+            # --- 2. HIGHEST & LOWEST AVERAGE RATING (TMDB Community Score) ---
+            # Use a threshold (e.g., >= 50 votes) so a single-vote 10/10 or 1/10 doesn't skew the results
+            vetted_avg = [m for m in milestone_pool if m['vote_count'] >= 50 and m['vote_average'] > 0]
+            if not vetted_avg:
+                # Fallback to any rated film if library contains only niche/low-vote items
+                vetted_avg = [m for m in milestone_pool if m['vote_average'] > 0]
+
+            if vetted_avg:
+                hi_avg = max(vetted_avg, key=lambda x: x['vote_average'])
+                lo_avg = min(vetted_avg, key=lambda x: x['vote_average'])
+                
+                # TMDB vote_average is out of 10, so dividing by 2 gives the 5-star equivalent
+                highest_rating = {"title": hi_avg['title'], "year": hi_avg['year'], "text": f"{hi_avg['title']} ({round(hi_avg['vote_average'] / 2.0, 1)}★)"}
+                lowest_rating = {"title": lo_avg['title'], "year": lo_avg['year'], "text": f"{lo_avg['title']} ({round(lo_avg['vote_average'] / 2.0, 1)}★)"}
                 
             feature_films = [m for m in milestone_pool if m['media_type'] == 'movie' and m['runtime'] > 0]
             if feature_films:
@@ -565,21 +601,19 @@ def get_homepage_stats(zip_path, max_movies_to_fetch=50, progress_callback=None)
         else:
             bio_dict = {}
 
-        # Map the fetched data back to the person objects
+       # Map the fetched data back to the person objects
         for group in all_cast_groups:
             for p in group:
                 if 'biography' not in p:
                     details = bio_dict.get(p['name'], {"image_url": None, "biography": ""})
                     p['image_url'] = details['image_url']
                     p['biography'] = details['biography']
-                    p['remaining'] = max(0, len(p.get('films', [])) - 10)
-                    p['top_films'] = p.get('films', [])[:10]
+                    # We removed the lines here that were creating 'top_films'
                 if 'avg_rating' in p and isinstance(p['avg_rating'], float):
                     p['avg_rating'] = round(p['avg_rating'], 2)
 
-        for group in all_cast_groups:
-            for p in group:
-                if 'films' in p: del p['films']
+        # We completely deleted the loop that was doing: `if 'films' in p: del p['films']`
+        # Now the full list of films is sent to the frontend!
 
         valid_years_df = movies_to_process[movies_to_process['safe_year'] > 0].copy()
         if not valid_years_df.empty:

@@ -470,3 +470,106 @@ h1 { font-size: 32px; margin-bottom: 10px; }
 .sort-dropdown:hover {
     border-color: rgba(255,255,255,0.4);
 }
+
+/* --- Reviews Tab Styling --- */
+.review-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.review-card:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+}
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.review-title-group {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.review-film-title {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: white;
+}
+
+.review-film-year {
+    font-size: 0.95em;
+    color: var(--text-muted);
+}
+
+.review-film-rating {
+    color: var(--green);
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.review-meta-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.review-likes-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background-color: rgba(255, 128, 0, 0.12);
+    color: var(--orange);
+    border: 1px solid rgba(255, 128, 0, 0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.review-date {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.review-body {
+    color: #ccd6dd;
+    line-height: 1.6;
+    font-size: 15px;
+    white-space: pre-line; /* Preserves paragraph line breaks */
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.review-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.review-link-btn {
+    color: var(--blue);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: bold;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.review-link-btn:hover {
+    opacity: 1;
+    text-decoration: underline;
+}

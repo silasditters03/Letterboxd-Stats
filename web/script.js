@@ -372,10 +372,10 @@ function buildDashboard(stats) {
             { title: "NEWEST FILM WATCHED", key: "newest_film" },
             { title: "OLDEST FILM WATCHED", key: "oldest_film" },
             { title: "MOST REWATCHED", key: "most_rewatched" },
-            { title: "MOST OBSCURE (TMDB)", key: "most_obscure" },
-            { title: "MOST POPULAR (TMDB)", key: "most_popular" },
-            { title: "HIGHEST RATED BY YOU", key: "highest_rating" },
-            { title: "LOWEST RATED BY YOU", key: "lowest_rating" },
+            { title: "MOST OBSCURE", key: "most_obscure" },
+            { title: "MOST POPULAR", key: "most_popular" },
+            { title: "HIGHEST AVERAGE RATING", key: "highest_rating" },
+            { title: "LOWEST AVERAGE RATING", key: "lowest_rating" },
             { title: "LONGEST RUNTIME", key: "longest_film" }
         ];
 
