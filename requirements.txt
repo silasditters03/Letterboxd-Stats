@@ -1,0 +1,5 @@
+Eel==0.18.2
+bottle==0.13.4
+gevent==26.9.0
+requests==2.34.2
+python-dotenv==1.2.4
